@@ -1,0 +1,230 @@
+/*
+ * Live Transcript — output page styles
+ *
+ * CSS custom properties below are the intended customisation points.
+ * Changing them is enough to restyle the entire page.
+ */
+
+:root {
+  /* Typography */
+  --font-family:   Georgia, "Times New Roman", serif;
+  --font-size:     28px;
+  --line-height:   1.6;
+  --text-align:    left;           /* left | center | right */
+
+  /* Colours */
+  --bg-color:      #0f0f0f;
+  --text-color:    #f0f0ee;
+  --interim-color: #7a7a7a;
+
+  /* Layout */
+  --max-width:     860px;
+  --h-padding:     40px;
+  --v-padding:     32px;
+
+  /* Bible panel */
+  --bible-bg:      rgba(20, 45, 80, 0.92);
+  --bible-border:  #4a7cbf;
+  --bible-ref-color:  #90c4f8;
+  --bible-text-color: #c8dff5;
+  --bible-font-size:  0.65em;
+
+  /* Connection dot */
+  --dot-size: 10px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reset / base                                                         */
+/* ------------------------------------------------------------------ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  overflow: hidden;           /* No scrollbar visible; container scrolls */
+}
+
+/* ------------------------------------------------------------------ */
+/* Bible reference panel                                               */
+/* ------------------------------------------------------------------ */
+
+#bible-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 10px var(--h-padding);
+  background: var(--bible-bg);
+  border-bottom: 2px solid var(--bible-border);
+  font-size: var(--bible-font-size);
+  z-index: 100;
+  transition: opacity 0.4s ease;
+}
+
+#bible-panel.hidden {
+  display: none;
+}
+
+#bible-ref {
+  color: var(--bible-ref-color);
+  font-weight: bold;
+  letter-spacing: 0.03em;
+  margin-bottom: 2px;
+}
+
+#bible-text {
+  color: var(--bible-text-color);
+  font-style: italic;
+  /* clamp to two lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* Transcript scroll container                                         */
+/* ------------------------------------------------------------------ */
+
+#scroll-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
+  padding: var(--v-padding) var(--h-padding);
+  /* push content down when bible panel is shown */
+  transition: padding-top 0.3s ease;
+  scrollbar-width: none;        /* Firefox */
+}
+
+#scroll-container::-webkit-scrollbar {
+  display: none;                /* Chrome/Safari */
+}
+
+#scroll-container.with-bible {
+  padding-top: calc(var(--v-padding) + 72px);
+}
+
+#transcript {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  text-align: var(--text-align);
+}
+
+#transcript p {
+  margin-bottom: 0.8em;
+}
+
+/* ------------------------------------------------------------------ */
+/* Interim text                                                        */
+/* ------------------------------------------------------------------ */
+
+p#interim {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  text-align: var(--text-align);
+  color: var(--interim-color);
+  font-style: italic;
+  min-height: 1.6em;    /* keep layout stable when empty */
+}
+
+p#interim:empty {
+  /* still reserve the line, but hide the text cursor */
+  color: transparent;
+}
+
+/* ------------------------------------------------------------------ */
+/* Connection status dot                                               */
+/* ------------------------------------------------------------------ */
+
+#conn-dot {
+  position: fixed;
+  bottom: 12px;
+  right: 14px;
+  width: var(--dot-size);
+  height: var(--dot-size);
+  border-radius: 50%;
+  opacity: 0.6;
+  transition: background-color 0.4s ease, opacity 0.4s ease;
+}
+
+#conn-dot.connected    { background: #27ae60; }
+#conn-dot.disconnected { background: #888888; }
+#conn-dot.reconnecting { background: #e6a817; }
+
+/* ------------------------------------------------------------------ */
+/* Accessibility / reduced motion                                      */
+/* ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Lower-third mode  (?lower_third=true)                              */
+/*                                                                     */
+/* Designed for use as a broadcast overlay (OBS Browser Source,       */
+/* vMix, Wirecast, etc.).  Background is transparent; only the most   */
+/* recent lines are visible; text has a drop-shadow for legibility     */
+/* on any background.                                                  */
+/* ------------------------------------------------------------------ */
+
+/* Number of visible lines in lower-third mode (change here to taste) */
+:root { --lt-lines: 3; }
+
+body.lower-third {
+  background: transparent;
+}
+
+/* Anchor the container to the bottom; clip height to --lt-lines */
+body.lower-third #scroll-container {
+  top: auto;
+  bottom: 0;
+  height: auto;
+  max-height: calc(var(--lt-lines) * var(--font-size) * var(--line-height) + 48px);
+  overflow: hidden;
+  padding: 8px var(--h-padding) 24px;
+  background: transparent;
+  /* no scrollbar needed */
+  scrollbar-width: none;
+}
+
+body.lower-third #scroll-container::-webkit-scrollbar { display: none; }
+
+/* Drop-shadow keeps text readable over any video background */
+body.lower-third #transcript p,
+body.lower-third p#interim {
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.95),
+    0 0   8px rgba(0, 0, 0, 0.80),
+    0 0  16px rgba(0, 0, 0, 0.60);
+}
+
+/* Bible panel: compact strip above the transcript area */
+body.lower-third #bible-panel {
+  top: auto;
+  bottom: calc(var(--lt-lines) * var(--font-size) * var(--line-height) + 52px);
+  border-top: 2px solid var(--bible-border);
+  border-bottom: none;
+  padding: 6px var(--h-padding);
+  background: var(--bible-bg);
+  font-size: 0.55em;
+}
+
+/* No scrollbar-padding needed; hide the connection dot for a clean output */
+body.lower-third #conn-dot {
+  display: none;
+}

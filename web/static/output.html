@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Transcript</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- Bible reference panel — hidden until a reference is detected -->
+  <div id="bible-panel" class="hidden" aria-live="polite">
+    <div id="bible-ref"></div>
+    <div id="bible-text"></div>
+  </div>
+
+  <!-- Transcript scroll container -->
+  <div id="scroll-container">
+    <div id="transcript" aria-live="polite" aria-atomic="false">
+      <!-- final paragraphs are appended here as <p> elements -->
+    </div>
+    <!-- Interim text lives below the finalized paragraphs -->
+    <p id="interim" class="interim"></p>
+  </div>
+
+  <!-- Connection status indicator (subtle corner dot) -->
+  <div id="conn-dot" class="disconnected" title="WebSocket connection status"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
