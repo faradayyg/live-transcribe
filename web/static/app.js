@@ -1,12 +1,13 @@
 /**
  * Live Transcript — WebSocket client
  *
- * Message types received from the Python server:
+ * Default mode  : single 10:2 overlay slot — one paragraph at a time.
+ *   Bible verse completely replaces the subtitle when active.
+ *   Background is transparent for use as an OBS/vMix browser source.
+ *   Set the browser source to a 10:2 resolution (e.g. 1920 × 384).
  *
- *   init            – full state snapshot (sent on every (re)connect)
- *   transcript      – one segment, final:true or final:false
- *   bible_reference – detected Bible reference + optional verse text
- *   status          – server-side transcription status string
+ * Full mode (?full=true) : dark scrolling page — all paragraphs, for
+ *   monitoring or editorial review.
  */
 
 "use strict";
@@ -15,54 +16,65 @@
 // Config
 // -----------------------------------------------------------------------
 
-const WS_PATH            = "/ws";
-const RECONNECT_BASE_MS  = 1_500;
-const RECONNECT_MAX_MS   = 30_000;
-const SCROLL_DEBOUNCE_MS = 80;
-
-// How many finalized segments to keep visible in lower-third mode.
-const LT_VISIBLE_SEGMENTS = 2;
+const WS_PATH           = "/ws";
+const RECONNECT_BASE_MS = 1_500;
+const RECONNECT_MAX_MS  = 30_000;
 
 // -----------------------------------------------------------------------
-// Lower-third is the default. Full-transcript mode is activated by
-// visiting with ?full=true (or ?full=1 / ?full=yes).
-const _fullParam = new URLSearchParams(window.location.search).get("full") || "";
-const isLowerThird = !["true", "1", "yes"].includes(_fullParam.toLowerCase());
+// Mode detection
+// -----------------------------------------------------------------------
 
-if (isLowerThird) {
-  document.body.classList.add("lower-third");
-}
+const _fullParam  = new URLSearchParams(window.location.search).get("full") || "";
+const isFullMode  = ["true", "1", "yes"].includes(_fullParam.toLowerCase());
+
+// -----------------------------------------------------------------------
+// DOM references
+// -----------------------------------------------------------------------
+
+const slotEl          = document.getElementById("slot");
+const viewSubtitleEl  = document.getElementById("view-subtitle");
+const viewBibleEl     = document.getElementById("view-bible");
+const currentTextEl   = document.getElementById("current-text");
+const interimTextEl   = document.getElementById("interim-text");
+const bibleRefEl      = document.getElementById("bible-ref");
+const bibleTextEl     = document.getElementById("bible-text");
+
+const fullContainerEl = document.getElementById("full-container");
+const transcriptEl    = document.getElementById("transcript");
+const fullInterimEl   = document.getElementById("full-interim");
+
+const connDotEl       = document.getElementById("conn-dot");
 
 // -----------------------------------------------------------------------
 // State
 // -----------------------------------------------------------------------
 
-let finalSegments = [];   // [{text, start, end}, ...]
-let interimText   = "";
-let socket        = null;
+let finalSegments  = [];   // [{text, start, end}, …]
+let interimText    = "";
+let bibleActive    = false;
+
+let socket         = null;
 let reconnectDelay = RECONNECT_BASE_MS;
-let scrollTimer    = null;
 
 // -----------------------------------------------------------------------
-// DOM references (resolved once at startup)
+// Initialise layout
 // -----------------------------------------------------------------------
 
-const transcriptEl  = document.getElementById("transcript");
-const interimEl     = document.getElementById("interim");
-const biblePanelEl  = document.getElementById("bible-panel");
-const bibleRefEl    = document.getElementById("bible-ref");
-const bibleTextEl   = document.getElementById("bible-text");
-const connDotEl     = document.getElementById("conn-dot");
-const scrollEl      = document.getElementById("scroll-container");
+if (isFullMode) {
+  slotEl.classList.add("hidden");
+  fullContainerEl.classList.remove("hidden");
+} else {
+  // Overlay mode — slot is already visible; full container stays hidden
+  fullContainerEl.classList.add("hidden");
+}
 
 // -----------------------------------------------------------------------
-// WebSocket connection
+// WebSocket
 // -----------------------------------------------------------------------
 
 function connect() {
   const url = `ws://${window.location.host}${WS_PATH}`;
   setDot("reconnecting");
-
   socket = new WebSocket(url);
 
   socket.addEventListener("open", () => {
@@ -70,162 +82,126 @@ function connect() {
     setDot("connected");
   });
 
-  socket.addEventListener("message", (event) => {
+  socket.addEventListener("message", (ev) => {
     let msg;
-    try { msg = JSON.parse(event.data); }
-    catch { return; }
+    try { msg = JSON.parse(ev.data); } catch { return; }
     handleMessage(msg);
   });
 
   socket.addEventListener("close", () => {
     setDot("disconnected");
     socket = null;
-    scheduleReconnect();
+    setTimeout(() => {
+      connect();
+      reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
+    }, reconnectDelay);
   });
 
-  socket.addEventListener("error", () => {
-    // 'close' fires right after 'error'; let that handler schedule reconnect
-    socket && socket.close();
-  });
-}
-
-function scheduleReconnect() {
-  setTimeout(() => {
-    connect();
-    reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_MS);
-  }, reconnectDelay);
+  socket.addEventListener("error", () => { socket && socket.close(); });
 }
 
 // -----------------------------------------------------------------------
-// Message handlers
+// Message dispatch
 // -----------------------------------------------------------------------
 
 function handleMessage(msg) {
   switch (msg.type) {
-    case "init":
-      applyInit(msg);
-      break;
-    case "transcript":
-      applyTranscript(msg);
-      break;
-    case "bible_reference":
-      applyBible(msg);
-      break;
-    case "status":
-      // Status is informational; the conn dot already reflects WS health.
-      break;
-    default:
-      break;
+    case "init":           applyInit(msg);       break;
+    case "transcript":     applyTranscript(msg); break;
+    case "bible_reference": applyBible(msg);     break;
+    default: break;
   }
 }
 
-/**
- * Full state snapshot — replaces any existing transcript content.
- * Called on every (re)connect so the page is always up to date.
- */
 function applyInit(msg) {
   finalSegments = (msg.segments || []).map(s => ({
-    text: s.text || "",
-    start: s.start ?? 0,
-    end:   s.end   ?? 0,
+    text: s.text || "", start: s.start ?? 0, end: s.end ?? 0,
   }));
   interimText = msg.interim || "";
-  renderTranscript();
-
-  if (msg.bible) {
-    applyBible(msg.bible);
-  }
+  render();
+  if (msg.bible) applyBible(msg.bible);
 }
 
 function applyTranscript(msg) {
   if (msg.final) {
-    finalSegments.push({
-      text:  msg.text  || "",
-      start: msg.start ?? 0,
-      end:   msg.end   ?? 0,
-    });
+    finalSegments.push({ text: msg.text || "", start: msg.start ?? 0, end: msg.end ?? 0 });
     interimText = "";
   } else {
     interimText = msg.text || "";
   }
-  renderTranscript();
+  render();
 }
 
 function applyBible(msg) {
   if (!msg || !msg.reference) {
-    // Empty reference = clear the panel
-    biblePanelEl.classList.add("hidden");
-    scrollEl.classList.remove("with-bible");
-    bibleRefEl.textContent  = "";
-    bibleTextEl.textContent = "";
+    bibleActive = false;
+    render();
     return;
   }
   bibleRefEl.textContent  = msg.reference;
   bibleTextEl.textContent = msg.text || "";
-  biblePanelEl.classList.remove("hidden");
-  scrollEl.classList.add("with-bible");
+  bibleActive = true;
+  render();
 }
 
 // -----------------------------------------------------------------------
-// Rendering
+// Render
 // -----------------------------------------------------------------------
 
-/**
- * Rebuild the transcript area from the current state.
- *
- * Final segments are rendered as individual <p> elements.
- * The interim element is updated in place.
- * DOM is only mutated when something actually changes to avoid reflow storms.
- */
-function renderTranscript() {
-  if (isLowerThird) {
-    // Lower-third: show only the last LT_VISIBLE_SEGMENTS finalized segments.
-    // Always do a full rebuild — the visible set is small (≤2 elements).
-    const visible = finalSegments.slice(-LT_VISIBLE_SEGMENTS);
-    transcriptEl.innerHTML = "";
-    for (const seg of visible) {
-      const p = document.createElement("p");
-      p.textContent = seg.text;
-      transcriptEl.appendChild(p);
-    }
+function render() {
+  if (isFullMode) {
+    renderFull();
   } else {
-    // Normal mode: incremental DOM sync to avoid reflow on large transcripts.
-    const existing = Array.from(transcriptEl.querySelectorAll("p"));
-    const newCount  = finalSegments.length;
+    renderOverlay();
+  }
+}
 
-    for (let i = existing.length; i < newCount; i++) {
-      const p = document.createElement("p");
-      p.textContent = finalSegments[i].text;
-      transcriptEl.appendChild(p);
-    }
+/**
+ * Overlay mode — single slot, one paragraph, bible takes precedence.
+ */
+function renderOverlay() {
+  if (bibleActive) {
+    viewSubtitleEl.classList.add("hidden");
+    viewBibleEl.classList.remove("hidden");
+    return;
+  }
 
-    for (let i = existing.length - 1; i >= newCount; i--) {
-      existing[i].remove();
-    }
+  viewBibleEl.classList.add("hidden");
+  viewSubtitleEl.classList.remove("hidden");
 
-    for (let i = 0; i < Math.min(existing.length, newCount); i++) {
-      if (existing[i].textContent !== finalSegments[i].text) {
-        existing[i].textContent = finalSegments[i].text;
-      }
+  // Show only the most recent finalised paragraph
+  const latest = finalSegments.length > 0
+    ? finalSegments[finalSegments.length - 1].text
+    : "";
+
+  currentTextEl.textContent = latest;
+  interimTextEl.textContent = interimText;
+}
+
+/**
+ * Full mode — scrolling history of all paragraphs.
+ */
+function renderFull() {
+  // Incremental DOM sync
+  const existing = Array.from(transcriptEl.querySelectorAll("p"));
+  const count    = finalSegments.length;
+
+  for (let i = existing.length; i < count; i++) {
+    const p = document.createElement("p");
+    p.textContent = finalSegments[i].text;
+    transcriptEl.appendChild(p);
+  }
+  for (let i = existing.length - 1; i >= count; i--) {
+    existing[i].remove();
+  }
+  for (let i = 0; i < Math.min(existing.length, count); i++) {
+    if (existing[i].textContent !== finalSegments[i].text) {
+      existing[i].textContent = finalSegments[i].text;
     }
   }
 
-  // Interim line (same in both modes)
-  interimEl.textContent = interimText;
-
-  scheduleScroll();
-}
-
-// -----------------------------------------------------------------------
-// Scroll to bottom (debounced)
-// -----------------------------------------------------------------------
-
-function scheduleScroll() {
-  if (scrollTimer) return;
-  scrollTimer = setTimeout(() => {
-    scrollTimer = null;
-    scrollEl.scrollTop = scrollEl.scrollHeight;
-  }, SCROLL_DEBOUNCE_MS);
+  fullInterimEl.textContent = interimText;
+  fullContainerEl.scrollTop = fullContainerEl.scrollHeight;
 }
 
 // -----------------------------------------------------------------------
@@ -233,11 +209,12 @@ function scheduleScroll() {
 // -----------------------------------------------------------------------
 
 function setDot(state) {
-  connDotEl.className = state;  // "connected" | "disconnected" | "reconnecting"
+  connDotEl.className = state;
 }
 
 // -----------------------------------------------------------------------
-// Initialise
+// Start
 // -----------------------------------------------------------------------
 
 connect();
+

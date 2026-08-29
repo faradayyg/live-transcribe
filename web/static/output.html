@@ -8,23 +8,36 @@
 </head>
 <body>
 
-  <!-- Bible reference panel — hidden until a reference is detected -->
-  <div id="bible-panel" class="hidden" aria-live="polite">
-    <div id="bible-ref"></div>
-    <div id="bible-text"></div>
-  </div>
+  <!--
+    Single content slot.
+    - Default (lower-third / overlay): one paragraph at a time.
+      Bible verse completely replaces the subtitle when active.
+    - Full transcript mode (?full=true): scrolling history.
+  -->
+  <div id="slot">
 
-  <!-- Transcript scroll container -->
-  <div id="scroll-container">
-    <div id="transcript" aria-live="polite" aria-atomic="false">
-      <!-- final paragraphs are appended here as <p> elements -->
+    <!-- Subtitle view -->
+    <div id="view-subtitle">
+      <p id="current-text"></p>
+      <p id="interim-text"></p>
     </div>
-    <!-- Interim text lives below the finalized paragraphs -->
-    <p id="interim" class="interim"></p>
+
+    <!-- Bible view — shown instead of subtitle when a reference is active -->
+    <div id="view-bible" class="hidden">
+      <p id="bible-ref"></p>
+      <p id="bible-text"></p>
+    </div>
+
   </div>
 
-  <!-- Connection status indicator (subtle corner dot) -->
-  <div id="conn-dot" class="disconnected" title="WebSocket connection status"></div>
+  <!-- Full-transcript mode scroll container (activated by ?full=true) -->
+  <div id="full-container" class="hidden">
+    <div id="transcript"></div>
+    <p id="full-interim"></p>
+  </div>
+
+  <!-- Subtle connection indicator -->
+  <div id="conn-dot" class="disconnected" title="WebSocket status"></div>
 
   <script src="/static/app.js"></script>
 </body>
