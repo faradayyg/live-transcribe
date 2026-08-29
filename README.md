@@ -1,9 +1,9 @@
-# Live Transcriber — v0.1
+# Live Transcriber
 
 A **local desktop application** for live transcription of a single speaker
-(sermon, lecture, presentation).  Audio is streamed to either **Deepgram** or
+(sermon, lecture, presentation). Audio is streamed to either **Deepgram** or
 **OpenAI** in real time; the transcript is displayed immediately and saved
-locally as `.txt` and `.srt`.  No audio is ever saved to disk.
+locally as `.txt` and `.srt`. No audio is ever saved to disk.
 
 ---
 
@@ -23,9 +23,18 @@ Audio Input (sounddevice)
         │  TranscriptSegment (normalised)
         ▼
   MainWindow (Qt main thread)
-     ├── TranscriptManager  → display
-     ├── BibleDetector      → reference panel  (non-blocking)
-     └── SRT / TXT writers  → saved on Stop/Save
+     ├── TranscriptManager       → live display + TXT/SRT on save
+     ├── TranscriptContextBuffer → rolling 20-second context window
+     │        │
+     │        ▼  (when candidate detected)
+     │   BibleResolverWorker     → debounce → background LLM call
+     │        │  list[BibleReference]
+     │        ▼
+     │   ReferenceHistory        → session history, deduplication
+     │        │
+     │        ▼
+     │   Bible panel (history list + verse display)
+     └── WebOutputServer         → HTTP + WebSocket → browser overlay
 ```
 
 Key modules:
@@ -35,16 +44,21 @@ Key modules:
 | `audio/capture.py` | sounddevice stream → byte queue |
 | `transcription/engine.py` | Abstract `TranscriptionEngine` interface |
 | `transcription/deepgram_engine.py` | Deepgram WebSocket implementation |
-| `transcription/openai_engine.py` | OpenAI Realtime API implementation |
+| `transcription/openai_engine.py` | OpenAI Realtime API (`gpt-live-transcribe`) |
 | `transcription/__init__.py` | `create_engine(provider)` factory |
 | `transcript/models.py` | `TranscriptSegment`, `BibleReference` dataclasses |
 | `transcript/manager.py` | In-memory segment store |
 | `transcript/srt.py` | SRT generation |
-| `bible/parser.py` | Book name dictionary + alias resolution |
-| `bible/detector.py` | Regex-based reference detection |
-| `bible/bible.json` | KJV public-domain verse lookup |
+| `bible/parser.py` | 66-book dictionary + alias/spoken-form resolution |
+| `bible/detector.py` | Regex candidate detector + `detect_all()` fallback |
+| `bible/context.py` | `TranscriptContextBuffer` (rolling window), `ReferenceHistory` |
+| `bible/resolver.py` | LLM resolver (`gpt-4o-mini`), `BibleResolverWorker` (Qt async) |
+| `bible/config.py` | Environment-variable configuration for the Bible system |
+| `bible/KJV/bible.json` | Complete KJV Bible (public domain) |
+| `web/server.py` | aiohttp HTTP + WebSocket server for browser overlay |
+| `web/static/` | Output page HTML/CSS/JS (lower-third + full-transcript modes) |
 | `ui/main_window.py` | PySide6 single-window UI |
-| `main.py` | Entry point + dark palette |
+| `main.py` | Entry point, `.env` loading, logging setup |
 
 ---
 
@@ -82,7 +96,7 @@ sudo apt-get install portaudio19-dev python3-dev
 ### 3 — Create a virtual environment
 
 ```bash
-cd live-transcriber
+cd live-transcribe
 python3.12 -m venv .venv
 source .venv/bin/activate      # macOS / Linux
 # .venv\Scripts\activate       # Windows
@@ -94,27 +108,30 @@ source .venv/bin/activate      # macOS / Linux
 pip install -r requirements.txt
 ```
 
-### 5 — Set API key(s)
+### 5 — Configure environment
 
-#### Deepgram
-
-Get your key from <https://console.deepgram.com/project>.
+Copy the template and fill in your values:
 
 ```bash
-export DEEPGRAM_API_KEY=your_deepgram_key
+cp .env.template .env
 ```
 
-#### OpenAI
+Then edit `.env`:
 
-Get your key from <https://platform.openai.com/api-keys>.
-Your account must have access to the **Realtime API**.
+```dotenv
+# Required for Deepgram engine
+DEEPGRAM_API_KEY=your_deepgram_key
 
-```bash
-export OPENAI_API_KEY=your_openai_key
+# Required for OpenAI engine and/or Bible LLM resolver
+OPENAI_API_KEY=your_openai_key
 ```
 
-> You only need to set the key for the provider you plan to use.
-> The app shows a warning banner if the selected provider's key is missing.
+`.env` is git-ignored and never committed. You only need to set the key(s)
+for the provider(s) you plan to use. The app shows a warning banner if the
+selected provider's key is missing.
+
+> Shell exports always take priority over `.env`. If `OPENAI_API_KEY` is
+> already in your environment, `.env` will not overwrite it.
 
 ---
 
@@ -123,6 +140,9 @@ export OPENAI_API_KEY=your_openai_key
 ```bash
 python main.py
 ```
+
+Logs are written to `logs/live_transcriber.log` (rotating, 5 MB × 3 files)
+and echoed to stderr. Set `LOG_LEVEL=DEBUG` in `.env` for verbose output.
 
 ---
 
@@ -144,14 +164,14 @@ In the **Session** panel, use the **Transcription engine** dropdown to choose:
 The status badge always shows the active provider:
 
 ```
-● Live  [OpenAI]
 ● Live  [Deepgram]
+● Live  [OpenAI]
 ```
 
-The engine selector is **locked** while a session is active.  
+The engine selector is **locked** while a session is active.
 Stop the session before switching providers.
 
-### Starting a transcription session
+### Starting a session
 
 1. Select your **Transcription engine**.
 2. Type a **Session name** (used for the saved file names).
@@ -159,20 +179,20 @@ Stop the session before switching providers.
 4. The status badge changes: *Connecting → Live*.
 5. Speak — transcript appears in real time.
    - **Grey italic** text = current unfinished interim segment.
-   - **White** text = finalized transcript.
+   - **White** text = finalised transcript.
 
 ### Pausing and resuming
 
-Click **⏸ Pause** to temporarily mute the microphone.  
+Click **⏸ Pause** to mute the microphone temporarily.
 Click **▶ Resume** to continue.
 
 ### Stopping a session
 
-Click **⏹ Stop**.  This disconnects from the provider and stops audio capture.
+Click **⏹ Stop**. This disconnects from the provider and stops audio capture.
 
 ### Saving the transcript
 
-After stopping, click **💾 Save Transcript** and choose a folder.  
+After stopping, click **💾 Save Transcript** and choose a folder.
 Two files are written:
 
 ```
@@ -182,25 +202,11 @@ Two files are written:
 
 ---
 
-## Switching providers
-
-You can run the same lecture through both providers to compare quality:
-
-1. Run the session with **Deepgram**.  Save as `session-deepgram.txt`.
-2. Click **⏹ Stop**.
-3. Change the engine to **OpenAI** in the dropdown.
-4. Start a new session.  Save as `session-openai.txt`.
-
-Both providers use the same GUI, Bible detector, web output, TXT, and SRT
-pipeline — so transcripts are directly comparable.
-
----
-
 ## Provider differences
 
 | Feature | Deepgram | OpenAI |
 |---|---|---|
-| Model | nova-2 | gpt-4o-transcribe |
+| Model | nova-2 | gpt-live-transcribe |
 | Interim results | Yes (word-level) | Yes (delta events) |
 | Final results | Yes | Yes |
 | Timestamps | Per-word from API | Wall-clock (monotonic) |
@@ -209,52 +215,98 @@ pipeline — so transcripts are directly comparable.
 | SRT | Works | Works (approx. timestamps) |
 
 OpenAI timestamps in the SRT are derived from wall-clock time because the
-Realtime API does not return per-word timestamps.  The segments are still
+Realtime API does not return per-word timestamps. The segments are still
 time-ordered and accurate to within the VAD silence window (~500 ms).
 
 ---
 
 ## Bible reference detection
 
-When the transcript contains a Bible reference the **Bible Reference** panel
-updates automatically with the detected reference and (where available) the
-KJV verse text.
-
-Supported forms:
+When the transcript contains a Bible reference, the **Detected Scripture**
+panel updates automatically. Detection uses a hybrid approach:
 
 ```
-John 3:16
-Romans 8:1-4
-Psalm 23
-1 Corinthians 13
+Finalised transcript segment
+         ↓
+ TranscriptContextBuffer     rolling 20-second window
+         ↓
+ is_candidate()              quick local check (book names + keywords)
+         ↓  (if candidate)
+ BibleResolverWorker         debounce (800 ms) → background LLM call
+         ↓
+ gpt-4o-mini                 structured JSON response
+         ↓
+ ReferenceHistory             dedup + upgrade (chapter-only → verse-specific)
+         ↓
+ Bible panel + verse text
+```
+
+The LLM **never blocks transcription** — it runs in a background thread pool.
+If the LLM is unavailable or fails, the local regex detector (`detect_all()`)
+is used as a fallback.
+
+### Supported reference forms
+
+```
+John 3:16                          John chapter 3 verse 16
+Romans 8:1-4                       Romans chapter 8 verses 1 through 4
+Psalm 23                           First Corinthians chapter 13
+1 Corinthians 13:4-7               John 3:16, 17, 18, and 19
 Matthew 5:3-12
-John chapter 3 verse 16
-Romans chapter 8 verses 1 through 4
-First Corinthians chapter 13
 ```
 
-Bible detection runs after finalisation and **never blocks transcription**.
+### Reference history panel
 
-The bundled `bible/bible.json` contains a curated set of commonly cited KJV
-verses (public domain).  To add more verses, extend the `"verses"` object
-using the key format `"Book:Chapter:Verse"`.
+All detected references accumulate in a **session history list** (newest
+first). Click any entry to display its Bible passage without changing the
+history.
+
+### Configuration
+
+All Bible resolver settings can be overridden in `.env`:
+
+| Variable | Default | Description |
+|---|---|---|
+| `BIBLE_LLM_ENABLED` | `true` | Set to `false` to use local regex only |
+| `BIBLE_LLM_MODEL` | `gpt-4o-mini` | OpenAI model for reference extraction |
+| `BIBLE_REFERENCE_CONFIDENCE_THRESHOLD` | `0.85` | Minimum confidence to accept a reference |
+| `BIBLE_CONTEXT_SECONDS` | `20.0` | Rolling context window (seconds) |
+| `BIBLE_DEBOUNCE_MS` | `800` | Delay before sending candidate to LLM (ms) |
+
+### Bible text
+
+The complete KJV Bible (`bible/KJV/bible.json`) is used for verse lookup.
+KJV text is in the public domain. The code is structured so that a different
+translation can be dropped in by replacing the JSON file.
 
 ---
 
-## Testing with a microphone
+## Web output
 
-Before connecting to a sound system:
+A local HTTP + WebSocket server runs on `http://localhost:8765` and provides
+a browser overlay suitable for OBS, Wirecast, or any browser-source input.
 
-1. Start the app.
-2. Select your built-in microphone.
-3. Choose your preferred engine (Deepgram or OpenAI).
-4. Name the session `test`.
-5. Click **▶ Start** and speak clearly for 30 seconds.
-6. Verify the live transcript updates as you speak.
-7. Reference a Bible verse aloud (e.g. "John chapter 3 verse 16").
-8. Check the Bible Reference panel updates.
-9. Click **⏹ Stop**, then **💾 Save**.
-10. Open the saved `.txt` and `.srt` files and confirm correctness.
+Two modes are available (shown as clickable URLs in the left panel):
+
+| URL | Mode |
+|---|---|
+| `http://localhost:8765` | **Lower-third** — last ~3 lines of transcript + current Scripture |
+| `http://localhost:8765?full=true` | **Full transcript** — scrolling complete transcript |
+
+The page auto-reconnects if the app is restarted. The current Scripture
+display updates whenever the operator selects a reference in the history panel.
+
+---
+
+## Logging
+
+Logs are written to `logs/live_transcriber.log`:
+
+- Rotating file: 5 MB per file, 3 backups kept (15 MB ceiling)
+- Also echoed to stderr during development
+- Format: `2026-08-29 09:52:58  INFO  bible.resolver  LLM resolved Romans 8:1-4`
+
+Set `LOG_LEVEL=DEBUG` in `.env` to enable verbose output from all modules.
 
 ---
 
@@ -264,20 +316,23 @@ Before connecting to a sound system:
 pytest tests/ -v
 ```
 
-The tests cover:
-- Bible reference parsing and detection (written + spoken forms)
-- Invalid / empty references
-- SRT timestamp formatting
-- SRT file generation
-- TranscriptManager state management
+138 tests covering:
+
+- Bible reference parsing (written + spoken forms, ranges, rapid-fire)
+- `is_candidate()` gate and `_parse_response()` normalisation
+- LLM resolver with mocked OpenAI responses (all reference types)
+- Cross-segment context and continuation
+- `ReferenceHistory` deduplication and upgrade
+- SRT timestamp formatting and file generation
+- `TranscriptManager` state management
 - Engine interface conformance (Deepgram + OpenAI)
 - Provider factory
 - OpenAI event handling (interim, final, errors)
 - Missing API key error paths
-- Web server output
+- Web server broadcast and init state
 
-Audio capture and live API integration require a live microphone and API key
-and are validated manually using the procedure above.
+Audio capture and live API calls require a microphone and API key and are
+validated manually.
 
 ---
 
@@ -285,83 +340,90 @@ and are validated manually using the procedure above.
 
 | Problem | Solution |
 |---|---|
-| "No input devices found" | Check system audio settings; try clicking ↺ Refresh |
-| Status stays "Connecting" | Check your internet connection and API key |
-| "DEEPGRAM_API_KEY is not set" | Export the variable before launching (see Setup §5) |
-| "OPENAI_API_KEY is not set" | Export the variable before launching (see Setup §5) |
+| "No input devices found" | Check system audio settings; click ↺ Refresh |
+| Status stays "Connecting" | Check your internet connection and API key in `.env` |
+| Warning banner at startup | Add the missing API key to `.env` |
 | OpenAI auth failed | Verify your key has Realtime API access at platform.openai.com |
-| OpenAI "access denied" | Your key may not have gpt-4o-transcribe Realtime access |
+| Bible references not detected | Check `OPENAI_API_KEY` is set; try `BIBLE_LLM_ENABLED=false` to test fallback |
+| Bible LLM resolver slow | Normal — LLM call is async; transcription is never blocked |
 | App freezes on Start | Make sure PortAudio is installed (`brew install portaudio`) |
 | Garbled / no transcript | Speak closer to the mic; check the level meter shows activity |
-| SRT timestamps off | OpenAI uses wall-clock times; Deepgram uses per-word API times |
+| SRT timestamps off | OpenAI uses wall-clock times; Deepgram provides per-word API times |
+| Web overlay not updating | Confirm the app is running; the page auto-reconnects after ~3 s |
 
 ---
 
-## Known limitations (v0.1)
+## Known limitations
 
-1. **English only** — The model is fixed to `nova-2` / `gpt-4o-transcribe`.
+1. **English only** — The transcription model is fixed to `nova-2` (Deepgram)
+   / `gpt-live-transcribe` (OpenAI).
 2. **Single speaker** — Speaker diarization is not implemented.
-3. **No reconnection** — If the WebSocket drops, restart the session.
-4. **Bible verse coverage** — Only commonly cited KJV verses are bundled;
-   most references will show the reference without the verse text.
-5. **No local backup** — If the app crashes mid-session, unsaved transcript
-   is lost (no auto-save).
-6. **macOS only tested** — Windows/Linux may need minor PortAudio tweaks.
-7. **OpenAI SRT timestamps** — Approximate (wall-clock relative); Deepgram
+3. **No reconnection** — If the WebSocket drops, stop and restart the session.
+4. **No auto-save** — If the app crashes mid-session, unsaved transcript is
+   lost.
+5. **macOS only tested** — Windows/Linux may need minor PortAudio tweaks.
+6. **OpenAI SRT timestamps** — Approximate (wall-clock relative); Deepgram
    provides more precise word-level timestamps.
 
 ---
 
-## Suggestions for v0.2
+## Suggestions for future versions
 
-> These are *not* implemented.  This list is for planning only.
-
-- **Automatic reconnection** on WebSocket disconnect.
-- **Auto-save** in-progress transcript to a temp file every 30 seconds.
-- **Language selection** in the UI.
-- **Font size control** in the transcript panel.
-- **Full KJV / ESV / NIV data file** loader (user supplies their own `.json`).
-- **Export to DOCX** alongside TXT/SRT.
-- **Keyword highlighting** — mark repeated words or phrases in the transcript.
-- **Speaker diarization** — once Deepgram stabilises the feature in `nova-2`.
-- **Confidence colouring** — shade low-confidence words differently.
-- **Session history** — list previously saved sessions on a sidebar.
+- Automatic WebSocket reconnection on disconnect.
+- Auto-save in-progress transcript every 30 seconds.
+- Language selection in the UI.
+- Font size control in the transcript panel.
+- Export to DOCX alongside TXT/SRT.
+- Speaker diarization once provider support stabilises.
+- Session history — list previously saved sessions in a sidebar.
 
 ---
-
 
 ## Project structure
 
 ```
-live-transcriber/
-├── main.py                     Entry point
+live-transcribe/
+├── main.py                     Entry point, .env loading, logging setup
 ├── requirements.txt
+├── .env.template               Configuration template — copy to .env
 ├── README.md
-├── ui/
-│   └── main_window.py          PySide6 single-window UI
 ├── audio/
 │   └── capture.py              sounddevice audio capture
 ├── transcription/
 │   ├── engine.py               Abstract TranscriptionEngine
-│   └── deepgram_engine.py      Deepgram WebSocket implementation
+│   ├── deepgram_engine.py      Deepgram WebSocket implementation
+│   └── openai_engine.py        OpenAI Realtime API (gpt-live-transcribe)
 ├── transcript/
-│   ├── models.py               TranscriptSegment, BibleReference
-│   ├── manager.py              In-memory transcript store
+│   ├── models.py               TranscriptSegment, BibleReference dataclasses
+│   ├── manager.py              In-memory segment store
 │   └── srt.py                  SRT generation
 ├── bible/
-│   ├── parser.py               Book name dictionary + alias resolution
-│   ├── detector.py             Regex-based reference detector
-│   └── bible.json              KJV public-domain verse lookup
-├── sessions/                   Default save location (local)
+│   ├── parser.py               66-book dictionary + alias resolution
+│   ├── detector.py             Regex detector (candidate gate + fallback)
+│   ├── context.py              TranscriptContextBuffer, ReferenceHistory
+│   ├── resolver.py             LLM resolver + BibleResolverWorker (Qt async)
+│   ├── config.py               Environment-variable configuration
+│   └── KJV/bible.json          Complete KJV Bible (public domain)
+├── web/
+│   ├── server.py               aiohttp HTTP + WebSocket server
+│   └── static/                 output.html, style.css, app.js
+├── ui/
+│   └── main_window.py          PySide6 single-window UI
+├── logs/                       Rotating log files (git-ignored)
+├── sessions/                   Default save location (git-ignored)
 └── tests/
-    ├── test_bible.py
-    ├── test_srt.py
-    └── test_transcript.py
+    ├── test_bible.py           Book parsing + basic detection
+    ├── test_bible_context.py   Context buffer + history + detect_all
+    ├── test_bible_resolver.py  LLM resolver (mocked), is_candidate, parse
+    ├── test_engines.py         Engine interface + provider factory
+    ├── test_srt.py             SRT generation
+    ├── test_transcript.py      TranscriptManager
+    └── test_web.py             Web server
 ```
 
 ---
 
 ## License
 
-This application and its source code are for personal use.  
-KJV verse text included in `bible/bible.json` is in the public domain.
+This application and its source code are for personal use.
+KJV text in `bible/KJV/bible.json` is in the public domain.
