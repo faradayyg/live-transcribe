@@ -72,7 +72,57 @@ Key modules:
 
 ---
 
-## Setup
+## Windows Setup
+
+> **Two double-clicks** is all a Windows user needs after downloading the project.
+
+### 1. Install Python 3.12 or newer
+
+Download from **<https://www.python.org/downloads/>**
+
+During installation, tick **"Add Python to PATH"** (or "Add python.exe to PATH").
+
+Verify the install:
+```
+py --version
+```
+
+### 2. Run setup
+
+Double-click **`setup.bat`** in the project folder.
+
+Setup will:
+- Check that Python 3.12+ is available
+- Create a `.venv` virtual environment (only on first run)
+- Install all Python dependencies
+- Verify that audio (sounddevice / PortAudio) works
+- Create `.env` from the template (only if `.env` does not already exist)
+- Create `logs\` and `sessions\` directories
+
+> **PortAudio**: `sounddevice` bundles the PortAudio DLLs for Windows inside
+> the Python package. You do **not** need to install PortAudio separately.
+
+### 3. Configure API keys
+
+Open **`.env`** (any text editor) and enter your key(s):
+
+```
+DEEPGRAM_API_KEY=your_deepgram_key_here
+OPENAI_API_KEY=your_openai_key_here
+```
+
+You only need to set the key for the provider you plan to use.
+
+### 4. Start the application
+
+Double-click **`run.bat`**.
+
+The application window opens. The console window stays open alongside it —
+it shows log output and any error messages.
+
+---
+
+## Setup (macOS / Linux)
 
 ### 1 — Install Python 3.12+
 
@@ -99,7 +149,6 @@ sudo apt-get install portaudio19-dev python3-dev
 cd live-transcribe
 python3.12 -m venv .venv
 source .venv/bin/activate      # macOS / Linux
-# .venv\Scripts\activate       # Windows
 ```
 
 ### 4 — Install dependencies
@@ -137,6 +186,9 @@ selected provider's key is missing.
 
 ## Running the application
 
+**Windows:** double-click `run.bat`
+
+**macOS / Linux:**
 ```bash
 python main.py
 ```
@@ -346,10 +398,86 @@ validated manually.
 | OpenAI auth failed | Verify your key has Realtime API access at platform.openai.com |
 | Bible references not detected | Check `OPENAI_API_KEY` is set; try `BIBLE_LLM_ENABLED=false` to test fallback |
 | Bible LLM resolver slow | Normal — LLM call is async; transcription is never blocked |
-| App freezes on Start | Make sure PortAudio is installed (`brew install portaudio`) |
+| App freezes on Start (macOS) | Make sure PortAudio is installed (`brew install portaudio`) |
 | Garbled / no transcript | Speak closer to the mic; check the level meter shows activity |
 | SRT timestamps off | OpenAI uses wall-clock times; Deepgram provides per-word API times |
 | Web overlay not updating | Confirm the app is running; the page auto-reconnects after ~3 s |
+
+---
+
+## Windows troubleshooting
+
+### Python not found
+
+Open Command Prompt and run:
+```
+py --version
+```
+or:
+```
+python --version
+```
+
+If neither is found, Python is not installed or not on PATH.
+Download from <https://www.python.org/downloads/> and tick **"Add Python to PATH"** during installation.
+
+### Python version too old
+
+`setup.bat` requires Python 3.12 or newer. If an older version is installed,
+download a newer one from <https://www.python.org/downloads/>. Multiple Python
+versions can coexist on Windows — the `py` launcher picks the right one.
+
+### Dependency installation failed
+
+Run `setup.bat` from a **Command Prompt** (not by double-clicking) so you can
+scroll up to see the full error:
+
+```
+cd C:\path\to\live-transcribe
+setup.bat
+```
+
+The error message will usually identify the failing package.
+
+### No audio devices
+
+1. Check that Windows has granted microphone access:
+   **Settings → Privacy & Security → Microphone** — ensure apps can access the microphone.
+2. Check **Sound Settings → Input** — confirm a microphone is listed and not disabled.
+3. Click the ↺ Refresh button in the app after connecting a device.
+
+### Audio capture fails (sounddevice error)
+
+`sounddevice` bundles PortAudio DLLs for Windows — no separate install is needed.
+If you see a PortAudio error, the **Microsoft Visual C++ Redistributable** may be missing.
+Download and install it from:
+<https://aka.ms/vs/17/release/vc_redist.x64.exe>
+
+### API key missing / warning banner
+
+Open `.env` in Notepad and add your key:
+```
+DEEPGRAM_API_KEY=your_key_here
+```
+or:
+```
+OPENAI_API_KEY=your_key_here
+```
+Save the file, then restart the application.
+
+### Application won't start / crashes immediately
+
+Run from Command Prompt to see the full error output:
+```
+cd C:\path\to\live-transcribe
+run.bat
+```
+Or double-click **`run_debug.bat`** — it sets `LOG_LEVEL=DEBUG` and keeps the
+console open so the full error is visible.
+
+### `.venv` missing when running `run.bat`
+
+Run `setup.bat` first. The application cannot start without the virtual environment.
 
 ---
 
@@ -386,6 +514,9 @@ live-transcribe/
 ├── main.py                     Entry point, .env loading, logging setup
 ├── requirements.txt
 ├── .env.template               Configuration template — copy to .env
+├── setup.bat                   Windows: one-time setup (double-click)
+├── run.bat                     Windows: launch the application
+├── run_debug.bat               Windows: launch with LOG_LEVEL=DEBUG
 ├── README.md
 ├── audio/
 │   └── capture.py              sounddevice audio capture

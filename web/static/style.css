@@ -1,31 +1,44 @@
 /*
- * Live Transcript — output page styles
+ * Live Transcript -- output page styles
  *
- * Default mode: a 10:2 aspect-ratio overlay slot.
- *   Set your OBS Browser Source to match (e.g. 1920 × 384).
- *   Background is transparent — place the source over your video feed.
+ * Default (overlay) mode:
+ *   Slot anchored to the bottom of the viewport.
+ *   Height is driven by content -- always bottom-aligned, expands upward.
+ *   Dark gradient scrim grows with the text for readable contrast.
+ *   Transparent everywhere above the scrim -- ideal OBS browser source.
+ *   Recommended OBS source size: 1920 x 384 (10:2) or full canvas width.
  *
- * Full-transcript mode (?full=true): scrolling dark page for monitoring.
+ * ?full=true   Scrolling dark page for monitoring / editorial review.
+ * ?bible=true  Bible verse only, no subtitle. Dark pill, centred.
  */
 
 :root {
   --font-family:      Georgia, "Times New Roman", serif;
-  --font-size:        32px;
+  --font-size:        34px;
   --line-height:      1.5;
 
-  --text-color:       #f0f0ee;
-  --interim-color:    #888888;
+  --text-color:       #ffffff;
+  --interim-color:    #b0b0b0;
+  --bible-ref-color:  #a8d4ff;
+  --bible-text-color: #e0efff;
 
-  --bible-ref-color:  #90c4f8;
-  --bible-text-color: #c8dff5;
+  --h-padding:        52px;
+  --v-padding:        20px;
+  /* Gradient fade-in height above the text block */
+  --scrim-lead:       80px;
 
-  --h-padding:        48px;
-  --v-padding:        24px;
+  --scrim: linear-gradient(
+    to bottom,
+    transparent        0%,
+    rgba(0,0,0,0.55)  40%,
+    rgba(0,0,0,0.82) 100%
+  );
 
   --shadow:
-    0 1px 4px  rgba(0, 0, 0, 0.95),
-    0 0  12px  rgba(0, 0, 0, 0.80),
-    0 0  24px  rgba(0, 0, 0, 0.50);
+    0 0   2px rgba(0,0,0,1.0),
+    0 1px 3px rgba(0,0,0,1.0),
+    0 2px 8px rgba(0,0,0,0.90),
+    0 0  20px rgba(0,0,0,0.70);
 
   --dot-size: 10px;
 }
@@ -51,23 +64,26 @@ html, body {
 }
 
 /* ------------------------------------------------------------------ */
-/* Main overlay slot  (10 : 2 — set OBS source to match, e.g. 1920×384)
+/* Overlay slot                                                        */
+/*                                                                     */
+/* Anchored to the bottom; height is auto so it always expands upward  */
+/* as text wraps. padding-top is the scrim's transparent lead-in.      */
 /* ------------------------------------------------------------------ */
 
 #slot {
   position: fixed;
-  inset: 0;
-  /* Enforce the 10:2 ratio so the slot never distorts if the viewport
-     is a different shape; excess space shows as transparent. */
-  aspect-ratio: 10 / 2;
-  width: 100%;
-  max-height: 100%;
-  margin: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
 
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;   /* anchor content to the bottom */
-  padding: var(--v-padding) var(--h-padding);
+  justify-content: flex-end;
+
+  /* top padding = gradient lead-in; side/bottom = breathing room */
+  padding: var(--scrim-lead) var(--h-padding) var(--v-padding);
+
+  background: var(--scrim);
 }
 
 /* ------------------------------------------------------------------ */
@@ -83,13 +99,14 @@ html, body {
 #current-text {
   color: var(--text-color);
   text-shadow: var(--shadow);
+  -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.8);
 }
 
 #interim-text {
   color: var(--interim-color);
   font-style: italic;
   text-shadow: var(--shadow);
-  min-height: 1em;  /* prevent layout jump when empty */
+  min-height: 1em;
 }
 
 #interim-text:empty {
@@ -97,7 +114,7 @@ html, body {
 }
 
 /* ------------------------------------------------------------------ */
-/* Bible view — completely replaces the subtitle view                  */
+/* Bible view                                                          */
 /* ------------------------------------------------------------------ */
 
 #view-bible {
@@ -114,19 +131,21 @@ html, body {
 #bible-ref {
   color: var(--bible-ref-color);
   font-weight: bold;
-  font-size: 0.65em;
-  letter-spacing: 0.04em;
+  font-size: 0.62em;
+  letter-spacing: 0.05em;
   text-shadow: var(--shadow);
+  -webkit-text-stroke: 0.4px rgba(0, 0, 0, 0.9);
 }
 
 #bible-text {
   color: var(--bible-text-color);
   font-style: italic;
   text-shadow: var(--shadow);
+  -webkit-text-stroke: 0.4px rgba(0, 0, 0, 0.8);
 }
 
 /* ------------------------------------------------------------------ */
-/* Full-transcript mode (?full=true) — monitoring / editorial use      */
+/* Full-transcript mode (?full=true)                                   */
 /* ------------------------------------------------------------------ */
 
 #full-container {
@@ -135,7 +154,7 @@ html, body {
   background: #0f0f0f;
   color: var(--text-color);
   overflow-y: auto;
-  padding: var(--v-padding) var(--h-padding);
+  padding: 32px 48px;
   scrollbar-width: none;
 }
 
@@ -151,6 +170,39 @@ html, body {
   color: var(--interim-color);
   font-style: italic;
   min-height: 1.5em;
+}
+
+/* ------------------------------------------------------------------ */
+/* Bible-only mode (?bible=true)                                       */
+/*                                                                     */
+/* Centred in the viewport; dark pill behind the verse; slot has no   */
+/* gradient scrim (pill provides the contrast).                        */
+/* ------------------------------------------------------------------ */
+
+body.bible-only #slot {
+  /* Override: centre in the full viewport, not just the bottom strip */
+  top: 0;
+  justify-content: center;
+  align-items: center;
+  padding: var(--h-padding);
+  background: transparent;
+}
+
+body.bible-only #view-bible {
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.72);
+  border-radius: 10px;
+  padding: 18px 28px;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.60);
+}
+
+body.bible-only #bible-ref {
+  font-size: 0.70em;
+  letter-spacing: 0.06em;
+}
+
+body.bible-only #bible-text {
+  font-size: var(--font-size);
 }
 
 /* ------------------------------------------------------------------ */
@@ -179,4 +231,3 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }
-

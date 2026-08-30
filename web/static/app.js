@@ -1,20 +1,21 @@
 /**
- * Live Transcript — WebSocket client
+ * Live Transcript -- WebSocket client
  *
- * Default mode  : single 10:2 overlay slot — one paragraph at a time.
- *   Bible verse completely replaces the subtitle when active.
- *   Background is transparent for use as an OBS/vMix browser source.
- *   Set the browser source to a 10:2 resolution (e.g. 1920 × 384).
+ * Modes (selected by URL query parameter):
  *
- * Full mode (?full=true) : dark scrolling page — all paragraphs, for
- *   monitoring or editorial review.
+ *   (default)    Overlay: 10:2 slot, one subtitle at a time.
+ *                Bible verse replaces subtitle when active.
+ *                Transparent background for OBS browser source.
+ *
+ *   ?full=true   Full transcript: dark scrolling page, all paragraphs.
+ *                For monitoring or editorial review.
+ *
+ *   ?bible=true  Bible-only: shows the current verse/reference only.
+ *                No subtitle displayed at all.
+ *                Transparent background; use as a separate OBS source.
  */
 
 "use strict";
-
-// -----------------------------------------------------------------------
-// Config
-// -----------------------------------------------------------------------
 
 const WS_PATH           = "/ws";
 const RECONNECT_BASE_MS = 1_500;
@@ -24,8 +25,10 @@ const RECONNECT_MAX_MS  = 30_000;
 // Mode detection
 // -----------------------------------------------------------------------
 
-const _fullParam  = new URLSearchParams(window.location.search).get("full") || "";
-const isFullMode  = ["true", "1", "yes"].includes(_fullParam.toLowerCase());
+const _params     = new URLSearchParams(window.location.search);
+const _truthy     = v => ["true", "1", "yes"].includes((v || "").toLowerCase());
+const isFullMode  = _truthy(_params.get("full"));
+const isBibleMode = _truthy(_params.get("bible"));
 
 // -----------------------------------------------------------------------
 // DOM references
@@ -49,10 +52,9 @@ const connDotEl       = document.getElementById("conn-dot");
 // State
 // -----------------------------------------------------------------------
 
-let finalSegments  = [];   // [{text, start, end}, …]
+let finalSegments  = [];
 let interimText    = "";
 let bibleActive    = false;
-
 let socket         = null;
 let reconnectDelay = RECONNECT_BASE_MS;
 
@@ -63,8 +65,13 @@ let reconnectDelay = RECONNECT_BASE_MS;
 if (isFullMode) {
   slotEl.classList.add("hidden");
   fullContainerEl.classList.remove("hidden");
+} else if (isBibleMode) {
+  document.body.classList.add("bible-only");
+  fullContainerEl.classList.add("hidden");
+  // Subtitle view is permanently hidden in this mode
+  viewSubtitleEl.classList.add("hidden");
 } else {
-  // Overlay mode — slot is already visible; full container stays hidden
+  // Default overlay mode
   fullContainerEl.classList.add("hidden");
 }
 
@@ -106,9 +113,9 @@ function connect() {
 
 function handleMessage(msg) {
   switch (msg.type) {
-    case "init":           applyInit(msg);       break;
-    case "transcript":     applyTranscript(msg); break;
-    case "bible_reference": applyBible(msg);     break;
+    case "init":            applyInit(msg);       break;
+    case "transcript":      applyTranscript(msg); break;
+    case "bible_reference": applyBible(msg);      break;
     default: break;
   }
 }
@@ -123,6 +130,7 @@ function applyInit(msg) {
 }
 
 function applyTranscript(msg) {
+  if (isBibleMode) return;   // transcript is irrelevant in bible-only mode
   if (msg.final) {
     finalSegments.push({ text: msg.text || "", start: msg.start ?? 0, end: msg.end ?? 0 });
     interimText = "";
@@ -135,12 +143,11 @@ function applyTranscript(msg) {
 function applyBible(msg) {
   if (!msg || !msg.reference) {
     bibleActive = false;
-    render();
-    return;
+  } else {
+    bibleRefEl.textContent  = msg.reference;
+    bibleTextEl.textContent = msg.text || "";
+    bibleActive = true;
   }
-  bibleRefEl.textContent  = msg.reference;
-  bibleTextEl.textContent = msg.text || "";
-  bibleActive = true;
   render();
 }
 
@@ -149,57 +156,48 @@ function applyBible(msg) {
 // -----------------------------------------------------------------------
 
 function render() {
-  if (isFullMode) {
-    renderFull();
-  } else {
-    renderOverlay();
-  }
+  if (isFullMode)  { renderFull();      return; }
+  if (isBibleMode) { renderBibleOnly(); return; }
+  renderOverlay();
 }
 
-/**
- * Overlay mode — single slot, one paragraph, bible takes precedence.
- */
+/** Default overlay: subtitle + bible share one slot; bible takes precedence. */
 function renderOverlay() {
   if (bibleActive) {
     viewSubtitleEl.classList.add("hidden");
     viewBibleEl.classList.remove("hidden");
     return;
   }
-
   viewBibleEl.classList.add("hidden");
   viewSubtitleEl.classList.remove("hidden");
-
-  // Show only the most recent finalised paragraph
-  const latest = finalSegments.length > 0
-    ? finalSegments[finalSegments.length - 1].text
-    : "";
-
-  currentTextEl.textContent = latest;
+  currentTextEl.textContent = finalSegments.length
+    ? finalSegments[finalSegments.length - 1].text : "";
   interimTextEl.textContent = interimText;
 }
 
-/**
- * Full mode — scrolling history of all paragraphs.
- */
+/** Bible-only: show the verse when active, show nothing when cleared. */
+function renderBibleOnly() {
+  if (bibleActive) {
+    viewBibleEl.classList.remove("hidden");
+  } else {
+    viewBibleEl.classList.add("hidden");
+  }
+}
+
+/** Full-transcript: scrolling history of all paragraphs. */
 function renderFull() {
-  // Incremental DOM sync
   const existing = Array.from(transcriptEl.querySelectorAll("p"));
   const count    = finalSegments.length;
-
   for (let i = existing.length; i < count; i++) {
     const p = document.createElement("p");
     p.textContent = finalSegments[i].text;
     transcriptEl.appendChild(p);
   }
-  for (let i = existing.length - 1; i >= count; i--) {
-    existing[i].remove();
-  }
+  for (let i = existing.length - 1; i >= count; i--) existing[i].remove();
   for (let i = 0; i < Math.min(existing.length, count); i++) {
-    if (existing[i].textContent !== finalSegments[i].text) {
+    if (existing[i].textContent !== finalSegments[i].text)
       existing[i].textContent = finalSegments[i].text;
-    }
   }
-
   fullInterimEl.textContent = interimText;
   fullContainerEl.scrollTop = fullContainerEl.scrollHeight;
 }
@@ -208,13 +206,10 @@ function renderFull() {
 // Connection dot
 // -----------------------------------------------------------------------
 
-function setDot(state) {
-  connDotEl.className = state;
-}
+function setDot(state) { connDotEl.className = state; }
 
 // -----------------------------------------------------------------------
 // Start
 // -----------------------------------------------------------------------
 
 connect();
-

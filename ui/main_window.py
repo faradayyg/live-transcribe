@@ -334,6 +334,7 @@ class MainWindow(QMainWindow):
         if self._web_server:
             base_url = self._web_server.url
             full_url = base_url + "?full=true"
+            bible_url = base_url + "?bible=true"
 
             label_style = "color: #6ab0f5; font-size: 11px;"
             selectable = Qt.TextInteractionFlag.TextSelectableByMouse
@@ -370,12 +371,31 @@ class MainWindow(QMainWindow):
             full_row.addWidget(copy_full_btn)
             web_layout.addLayout(full_row)
 
+            web_layout.addWidget(QLabel("Bible-only:"))
+            bible_row = QHBoxLayout()
+            bible_label = QLabel(bible_url)
+            bible_label.setStyleSheet(label_style)
+            bible_label.setWordWrap(True)
+            bible_label.setTextInteractionFlags(selectable)
+            copy_bible_btn = QPushButton("⧉")
+            copy_bible_btn.setFixedWidth(28)
+            copy_bible_btn.setToolTip("Copy bible-only URL")
+            copy_bible_btn.clicked.connect(
+                lambda: self._copy_to_clipboard(bible_url, copy_bible_btn)
+            )
+            bible_row.addWidget(bible_label)
+            bible_row.addWidget(copy_bible_btn)
+            web_layout.addLayout(bible_row)
+
             open_lt_btn = QPushButton("🌐  Open Lower-third")
             open_full_btn = QPushButton("🌐  Open Full Transcript")
+            open_bible_btn = QPushButton("🌐  Open Bible-only")
             open_lt_btn.clicked.connect(self._open_web_output)
             open_full_btn.clicked.connect(self._open_web_output_full)
+            open_bible_btn.clicked.connect(self._open_web_output_bible)
             web_layout.addWidget(open_lt_btn)
             web_layout.addWidget(open_full_btn)
+            web_layout.addWidget(open_bible_btn)
         else:
             web_layout.addWidget(QLabel("⚠ Server unavailable"))
 
@@ -496,6 +516,13 @@ class MainWindow(QMainWindow):
 
         if self._web_server:
             webbrowser.open(self._web_server.url + "?full=true")
+
+    @Slot()
+    def _open_web_output_bible(self) -> None:
+        import webbrowser
+
+        if self._web_server:
+            webbrowser.open(self._web_server.url + "?bible=true")
 
     def _copy_to_clipboard(self, text: str, button: QPushButton) -> None:
         QApplication.clipboard().setText(text)
