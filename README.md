@@ -274,8 +274,8 @@ time-ordered and accurate to within the VAD silence window (~500 ms).
 
 ## Bible reference detection
 
-When the transcript contains a Bible reference, the **Detected Scripture**
-panel updates automatically. Detection uses a hybrid approach:
+When the transcript contains a Bible reference, the **Scripture** panel
+updates automatically. Detection uses a hybrid approach:
 
 ```
 Finalised transcript segment
@@ -290,12 +290,26 @@ Finalised transcript segment
          ↓
  ReferenceHistory             dedup + upgrade (chapter-only → verse-specific)
          ↓
- Bible panel + verse text
+ Scripture panel + verse text + web overlay broadcast
 ```
 
 The LLM **never blocks transcription** — it runs in a background thread pool.
 If the LLM is unavailable or fails, the local regex detector (`detect_all()`)
 is used as a fallback.
+
+### Manual reference lookup
+
+Type any reference directly into the **Reference** field at the top of the
+Scripture panel and press **Enter** (or click **Display**). The reference is
+parsed locally, added to the session history, and broadcast to the web overlay
+immediately — no transcription required.
+
+### Verse-pair navigator
+
+When a ranged reference is detected or entered (e.g. *Romans 8:1–17*), the
+panel shows a row of clickable 2-verse chunk buttons (*Romans 8:1–2*,
+*Romans 8:3–4*, …). The operator can step through them manually to keep the
+overlay in sync with the reader without changing the session history.
 
 ### Supported reference forms
 
@@ -338,15 +352,21 @@ translation can be dropped in by replacing the JSON file.
 A local HTTP + WebSocket server runs on `http://localhost:8765` and provides
 a browser overlay suitable for OBS, Wirecast, or any browser-source input.
 
-Two modes are available (shown as clickable URLs in the left panel):
+Three modes are available (shown as clickable URLs in the left panel):
 
 | URL | Mode |
 |---|---|
-| `http://localhost:8765` | **Lower-third** — last ~3 lines of transcript + current Scripture |
+| `http://localhost:8765` | **Lower-third** — last paragraph of transcript + current Scripture, bottom-anchored |
 | `http://localhost:8765?full=true` | **Full transcript** — scrolling complete transcript |
+| `http://localhost:8765?bible=true` | **Bible-only** — current Scripture verse only; transcript ignored |
+
+All modes use a 10:2 aspect ratio slot anchored to the bottom of the
+viewport. Text expands upward as needed. The Bible verse overlay takes
+full precedence over the subtitle in lower-third mode.
 
 The page auto-reconnects if the app is restarted. The current Scripture
-display updates whenever the operator selects a reference in the history panel.
+display updates whenever the operator selects a reference in the Scripture
+panel.
 
 ---
 
@@ -489,7 +509,8 @@ Run `setup.bat` first. The application cannot start without the virtual environm
 3. **No reconnection** — If the WebSocket drops, stop and restart the session.
 4. **No auto-save** — If the app crashes mid-session, unsaved transcript is
    lost.
-5. **macOS only tested** — Windows/Linux may need minor PortAudio tweaks.
+5. **No auto-save** — If the app crashes mid-session, unsaved transcript is
+   lost.
 6. **OpenAI SRT timestamps** — Approximate (wall-clock relative); Deepgram
    provides more precise word-level timestamps.
 
