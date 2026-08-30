@@ -180,10 +180,7 @@ html, body {
 /* ------------------------------------------------------------------ */
 
 body.bible-only #slot {
-  /* Override: centre in the full viewport, not just the bottom strip */
-  top: 0;
-  justify-content: center;
-  align-items: center;
+  /* Keep bottom-anchored like the overlay; pill provides contrast instead of scrim */
   padding: var(--h-padding);
   background: transparent;
 }

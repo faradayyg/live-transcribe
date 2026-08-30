@@ -416,8 +416,26 @@ class MainWindow(QMainWindow):
         transcript_layout.addWidget(self._transcript_view)
         right_splitter.addWidget(transcript_frame)
 
-        bible_frame = QGroupBox("Detected Scripture")
+        bible_frame = QGroupBox("Scripture")
         bible_layout = QVBoxLayout(bible_frame)
+
+        # ---- Manual reference lookup --------------------------------
+        lookup_row = QHBoxLayout()
+        lookup_row.addWidget(QLabel("Reference:"))
+        self._ref_input = QLineEdit()
+        self._ref_input.setPlaceholderText("e.g.  John 3:16  or  Romans 8:1-4")
+        self._ref_input.returnPressed.connect(self._on_manual_ref_display)
+        lookup_row.addWidget(self._ref_input)
+        display_btn = QPushButton("Display")
+        display_btn.setFixedWidth(64)
+        display_btn.clicked.connect(self._on_manual_ref_display)
+        lookup_row.addWidget(display_btn)
+        self._ref_error_label = QLabel("")
+        self._ref_error_label.setStyleSheet("color: #e05050; font-size: 11px;")
+        bible_layout.addLayout(lookup_row)
+        bible_layout.addWidget(self._ref_error_label)
+
+        bible_layout.addWidget(_hline())
 
         list_header = QHBoxLayout()
         list_header.addWidget(QLabel("References detected this session:"))
@@ -444,10 +462,30 @@ class MainWindow(QMainWindow):
         ref_font.setPointSize(12)
         ref_font.setBold(True)
         self._bible_ref_label.setFont(ref_font)
+        bible_layout.addWidget(self._bible_ref_label)
+
+        # Verse-pair navigator — shown only for ranged references
+        self._chunk_label = QLabel("Click a pair to display on overlay:")
+        self._chunk_label.setStyleSheet("color: #888; font-size: 11px; margin-top: 4px;")
+        self._chunk_list = QListWidget()
+        self._chunk_list.setFixedHeight(72)
+        self._chunk_list.setFlow(QListWidget.Flow.LeftToRight)
+        self._chunk_list.setWrapping(True)
+        self._chunk_list.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self._chunk_list.setStyleSheet(
+            "QListWidget { background: #111122; color: #e0e0e0; border: 1px solid #333; font-size: 11px; }"
+            "QListWidget::item { padding: 3px 8px; margin: 2px; border: 1px solid #444; border-radius: 4px; }"
+            "QListWidget::item:selected { background: #2c5f8a; color: #fff; border-color: #5599cc; }"
+        )
+        self._chunk_list.itemClicked.connect(self._on_chunk_clicked)
+        self._chunk_label.hide()
+        self._chunk_list.hide()
+        bible_layout.addWidget(self._chunk_label)
+        bible_layout.addWidget(self._chunk_list)
+
         self._bible_verse_label = QLabel("")
         self._bible_verse_label.setWordWrap(True)
         self._bible_verse_label.setStyleSheet("color: #aaa; font-style: italic;")
-        bible_layout.addWidget(self._bible_ref_label)
         bible_layout.addWidget(self._bible_verse_label)
         bible_layout.addStretch()
         right_splitter.addWidget(bible_frame)
@@ -814,15 +852,78 @@ class MainWindow(QMainWindow):
         if ref:
             self._show_bible_ref(ref, auto_select=False)
 
+    @Slot()
+    def _on_manual_ref_display(self) -> None:
+        """Parse the typed reference and display it on the overlay."""
+        text = self._ref_input.text().strip()
+        if not text:
+            return
+        refs = bible_detector.detect_all(text)
+        if not refs:
+            self._ref_error_label.setText(f'Could not parse "{text}"')
+            return
+        self._ref_error_label.setText("")
+        ref = refs[0]
+        # Add to session history so it appears in the detected list
+        self._bible_history.add_or_upgrade(ref)
+        self._show_bible_ref(ref, auto_select=True)
+
     def _show_bible_ref(self, ref: BibleReference, *, auto_select: bool = True) -> None:
         self._selected_ref = ref
         self._bible_ref_label.setText(ref.display())
+        self._populate_chunk_list(ref)
+        # Default verse text: single verse or all verses in range
         verse_text = self._get_verse_range_text(ref)
         self._bible_verse_label.setText(verse_text)
         if auto_select:
             self._refresh_bible_list()
         if self._web_server:
             self._web_server.broadcast_bible(ref.display(), verse_text)
+
+    def _populate_chunk_list(self, ref: BibleReference) -> None:
+        """Populate the verse-pair navigator when ref spans multiple verses."""
+        self._chunk_list.clear()
+        if ref.verse_start is None or ref.verse_end is None:
+            self._chunk_label.hide()
+            self._chunk_list.hide()
+            return
+
+        chunks = self._split_into_pairs(ref)
+        if len(chunks) <= 1:
+            # Single verse or single pair — no navigator needed
+            self._chunk_label.hide()
+            self._chunk_list.hide()
+            return
+
+        self._chunk_label.show()
+        self._chunk_list.show()
+        for chunk in chunks:
+            item = QListWidgetItem(chunk.display())
+            item.setData(Qt.ItemDataRole.UserRole, chunk)
+            self._chunk_list.addItem(item)
+
+    @staticmethod
+    def _split_into_pairs(ref: BibleReference) -> list[BibleReference]:
+        """Split a ranged reference into 2-verse chunks."""
+        from dataclasses import replace
+        vs = ref.verse_start
+        ve = ref.verse_end
+        chunks: list[BibleReference] = []
+        v = vs
+        while v <= ve:
+            pair_end = min(v + 1, ve)
+            end = None if pair_end == v else pair_end
+            chunks.append(replace(ref, verse_start=v, verse_end=end, confidence=1.0))
+            v += 2
+        return chunks
+
+    @Slot(QListWidgetItem)
+    def _on_chunk_clicked(self, item: QListWidgetItem) -> None:
+        chunk: BibleReference = item.data(Qt.ItemDataRole.UserRole)
+        verse_text = self._get_verse_range_text(chunk)
+        self._bible_verse_label.setText(verse_text)
+        if self._web_server:
+            self._web_server.broadcast_bible(chunk.display(), verse_text)
 
     def _get_verse_range_text(self, ref: BibleReference) -> str:
         if ref.verse_start is None:
@@ -846,6 +947,9 @@ class MainWindow(QMainWindow):
         self._bible_list.clear()
         self._bible_ref_label.setText("—")
         self._bible_verse_label.setText("")
+        self._chunk_list.clear()
+        self._chunk_label.hide()
+        self._chunk_list.hide()
         if self._web_server:
             self._web_server.broadcast_bible("", "")
 
