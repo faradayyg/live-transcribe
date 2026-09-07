@@ -288,7 +288,9 @@ def resolve(
     )
 
     raw = response.choices[0].message.content or "{}"
+    log.debug("LLM raw response length: %d", len(raw), extra={"llm_response": raw})
     try:
+        log.debug("LLM raw response: %r", raw[:200])
         data = json.loads(raw)
     except json.JSONDecodeError:
         log.warning("LLM returned non-JSON response: %r", raw[:200])
@@ -372,6 +374,7 @@ class BibleResolverWorker(QObject):
         try:
             refs = future.result()
             if refs:
+                log.debug("LLM resolved %d references: %s", len(refs), refs)
                 # Safe to emit from a non-Qt thread; Qt queues it
                 self.refs_resolved.emit(refs)
         except Exception as exc:

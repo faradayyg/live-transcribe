@@ -370,6 +370,56 @@ panel.
 
 ---
 
+## Web Control Panel
+
+A mobile-friendly control page is available at:
+
+```text
+http://localhost:8765/control
+```
+
+(use the computer's LAN IP instead of `localhost` to control the app from a
+phone or tablet on the same network — e.g. `http://192.168.1.23:8765/control`).
+The URL is also shown, with a copy button and an "Open Control Panel" button,
+in the **Web Output** panel of the main window.
+
+The control panel lets an operator run the service without touching the
+PySide6 window:
+
+- **Pause / Resume transcription** — uses the same pause/resume mechanism as
+  the desktop UI; the engine is never stopped or recreated.
+- **Bible reference history** — shows the same `ReferenceHistory` used by the
+  desktop app's Scripture panel (no separate history is kept for the web).
+  Tapping a past reference makes it the current Scripture, exactly as
+  clicking it in the desktop app would.
+- **Hide / Show Bible** — toggles whether the Bible passage is shown on the
+  output page. This does *not* clear the current reference: hiding and then
+  showing again restores the same passage.
+- **Display mode** — toggle between **Subtitles + Bible** and **Bible only**
+  on the output page. This only changes what is rendered; it never pauses
+  transcription, disables Bible detection, or affects `?bible=true`, which
+  remains a hard per-browser override for a dedicated OBS scene.
+- **Verse-pair navigator** — when the current reference spans more than two
+  verses, the panel shows the same 2-verse chunks as the desktop app's
+  navigator, so the operator can tap along pair-by-pair as the reader reads
+  a long passage, from a phone. Tapping a pair updates the output page
+  immediately without changing the reference history or selection.
+
+All state shown in the control panel — and on the output page — comes from
+one canonical application state owned by the main window and broadcast over
+the existing WebSocket connection. A change made from a phone (pause, select
+reference, hide Bible, switch mode) is applied to the real application state
+and immediately reflected in the desktop UI, the output page, and every other
+connected control-panel tab. Browsers never decide state on their own; every
+control action is validated and applied server-side, and invalid commands
+(e.g. selecting a reference that isn't in the history, or an unknown display
+mode) are rejected without changing anything.
+
+The control panel requires no login — like the rest of the app, it is meant
+for use on a trusted local network only.
+
+---
+
 ## Logging
 
 Logs are written to `logs/live_transcriber.log`:
@@ -388,7 +438,7 @@ Set `LOG_LEVEL=DEBUG` in `.env` to enable verbose output from all modules.
 pytest tests/ -v
 ```
 
-138 tests covering:
+162 tests covering:
 
 - Bible reference parsing (written + spoken forms, ranges, rapid-fire)
 - `is_candidate()` gate and `_parse_response()` normalisation
@@ -402,6 +452,9 @@ pytest tests/ -v
 - OpenAI event handling (interim, final, errors)
 - Missing API key error paths
 - Web server broadcast and init state
+- Web Control Panel: pause/resume, reference selection (valid/invalid),
+  hide/show Bible, display-mode switching, verse-pair navigator, canonical
+  state broadcast, and multi-client synchronization
 
 Audio capture and live API calls require a microphone and API key and are
 validated manually.
@@ -557,8 +610,8 @@ live-transcribe/
 │   ├── config.py               Environment-variable configuration
 │   └── KJV/bible.json          Complete KJV Bible (public domain)
 ├── web/
-│   ├── server.py               aiohttp HTTP + WebSocket server
-│   └── static/                 output.html, style.css, app.js
+│   ├── server.py               aiohttp HTTP + WebSocket server (output + control API)
+│   └── static/                 output.html, control.html, style.css, control.css, app.js, control.js
 ├── ui/
 │   └── main_window.py          PySide6 single-window UI
 ├── logs/                       Rotating log files (git-ignored)
@@ -570,7 +623,8 @@ live-transcribe/
     ├── test_engines.py         Engine interface + provider factory
     ├── test_srt.py             SRT generation
     ├── test_transcript.py      TranscriptManager
-    └── test_web.py             Web server
+    ├── test_web.py             Web server
+    └── test_control.py        Control panel API + canonical state sync
 ```
 
 ---

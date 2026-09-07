@@ -6,13 +6,22 @@
  *   (default)    Overlay: 10:2 slot, one subtitle at a time.
  *                Bible verse replaces subtitle when active.
  *                Transparent background for OBS browser source.
+ *                Reflects the canonical display_mode ("subtitles_bible" vs
+ *                "bible_only") broadcast by the app / control panel.
  *
  *   ?full=true   Full transcript: dark scrolling page, all paragraphs.
- *                For monitoring or editorial review.
+ *                For monitoring or editorial review. Unaffected by
+ *                display_mode / bible_visible.
  *
  *   ?bible=true  Bible-only: shows the current verse/reference only.
  *                No subtitle displayed at all.
- *                Transparent background; use as a separate OBS source.
+ *                Transparent background; use as a separate, permanent
+ *                OBS source regardless of the canonical display_mode.
+ *
+ * Canonical state ("state" WebSocket messages, see web/server.py) drives
+ * `display.mode` and `bible.visible` for the default (non-URL-forced)
+ * output page. This page never mutates that state itself — only the
+ * PySide6 app and /control panel do, via the shared control API.
  */
 
 "use strict";
@@ -55,6 +64,8 @@ const connDotEl       = document.getElementById("conn-dot");
 let finalSegments  = [];
 let interimText    = "";
 let bibleActive    = false;
+let bibleVisible   = true;
+let displayMode    = "subtitles_bible";
 let socket         = null;
 let reconnectDelay = RECONNECT_BASE_MS;
 
@@ -116,6 +127,7 @@ function handleMessage(msg) {
     case "init":            applyInit(msg);       break;
     case "transcript":      applyTranscript(msg); break;
     case "bible_reference": applyBible(msg);      break;
+    case "state":           applyState(msg);      break;
     default: break;
   }
 }
@@ -151,19 +163,30 @@ function applyBible(msg) {
   render();
 }
 
+/**
+ * Canonical control-state broadcast — driven by PySide6 and the web
+ * control panel (/control). The output page never mutates this locally;
+ * it only ever reflects the server's most recent broadcast.
+ */
+function applyState(msg) {
+  if (msg.display) displayMode  = msg.display.mode || displayMode;
+  if (msg.bible)   bibleVisible = msg.bible.visible !== false;
+  render();
+}
+
 // -----------------------------------------------------------------------
 // Render
 // -----------------------------------------------------------------------
 
 function render() {
   if (isFullMode)  { renderFull();      return; }
-  if (isBibleMode) { renderBibleOnly(); return; }
+  if (isBibleMode || displayMode === "bible_only") { renderBibleOnly(); return; }
   renderOverlay();
 }
 
 /** Default overlay: subtitle + bible share one slot; bible takes precedence. */
 function renderOverlay() {
-  if (bibleActive) {
+  if (bibleActive && bibleVisible) {
     viewSubtitleEl.classList.add("hidden");
     viewBibleEl.classList.remove("hidden");
     return;
@@ -175,9 +198,9 @@ function renderOverlay() {
   interimTextEl.textContent = interimText;
 }
 
-/** Bible-only: show the verse when active, show nothing when cleared. */
+/** Bible-only: show the verse when active and visible, otherwise nothing. */
 function renderBibleOnly() {
-  if (bibleActive) {
+  if (bibleActive && bibleVisible) {
     viewBibleEl.classList.remove("hidden");
   } else {
     viewBibleEl.classList.add("hidden");

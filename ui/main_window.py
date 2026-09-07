@@ -168,6 +168,32 @@ _STATUS_COLORS = {
     "Paused": "#2980b9",
 }
 
+_VALID_DISPLAY_MODES = ("subtitles_bible", "bible_only")
+
+
+# ---------------------------------------------------------------------------
+# Control bridge — web control panel (aiohttp thread) -> Qt main thread
+# ---------------------------------------------------------------------------
+
+
+class ControlBridge(QObject):
+    """
+    Cross-thread bridge between the web control API and the Qt main thread.
+
+    The aiohttp server runs in its own background thread. Its request
+    handlers call `.emit()` on these signals; because this QObject is
+    constructed on (and lives on) the Qt main thread, Qt automatically
+    queues delivery so the connected slots always run on the main thread —
+    the same pattern already used for TranscriptionEngine callbacks.
+    """
+
+    pause_requested = Signal()
+    resume_requested = Signal()
+    select_reference_requested = Signal(str)
+    set_bible_visible_requested = Signal(bool)
+    set_display_mode_requested = Signal(str)
+    select_chunk_requested = Signal(int)
+
 
 # ---------------------------------------------------------------------------
 # Main window
@@ -196,6 +222,9 @@ class MainWindow(QMainWindow):
         self._thread: Optional[QThread] = None
         self._session_active = False
         self._paused = False
+        self._bible_visible = True
+        self._display_mode = "subtitles_bible"
+        self._current_chunk_index: Optional[int] = None
         self._selected_provider = "Deepgram"  # default
 
         logger.info(
@@ -207,6 +236,24 @@ class MainWindow(QMainWindow):
         self._resolver_worker = BibleResolverWorker()
         self._resolver_worker.refs_resolved.connect(self._on_refs_resolved)
 
+        # Control bridge: connects the web /control panel's HTTP commands to
+        # the same application-level operations used by the PySide6 buttons.
+        self._control_bridge = ControlBridge()
+        self._control_bridge.pause_requested.connect(self._pause_transcription)
+        self._control_bridge.resume_requested.connect(self._resume_transcription)
+        self._control_bridge.select_reference_requested.connect(
+            self._select_reference_by_key
+        )
+        self._control_bridge.set_bible_visible_requested.connect(
+            self._set_bible_visible
+        )
+        self._control_bridge.set_display_mode_requested.connect(
+            self._set_display_mode
+        )
+        self._control_bridge.select_chunk_requested.connect(
+            self._select_chunk_by_index
+        )
+
         # Start the web output server (runs in its own background thread)
         self._web_server = WebOutputServer()
         try:
@@ -217,9 +264,20 @@ class MainWindow(QMainWindow):
 
             logging.getLogger(__name__).warning("Web server failed to start: %s", exc)
 
+        if self._web_server:
+            self._web_server.set_control_callbacks(
+                pause=self._control_bridge.pause_requested.emit,
+                resume=self._control_bridge.resume_requested.emit,
+                select_reference=self._control_bridge.select_reference_requested.emit,
+                set_bible_visible=self._control_bridge.set_bible_visible_requested.emit,
+                set_display_mode=self._control_bridge.set_display_mode_requested.emit,
+                select_chunk=self._control_bridge.select_chunk_requested.emit,
+            )
+
         self._build_ui()
         self._refresh_devices()
         self._check_api_key()
+        self._push_state()
 
     # ------------------------------------------------------------------
     # UI construction
@@ -387,15 +445,35 @@ class MainWindow(QMainWindow):
             bible_row.addWidget(copy_bible_btn)
             web_layout.addLayout(bible_row)
 
+            control_url = self._web_server.control_url
+            web_layout.addWidget(QLabel("Operator control panel (use on your phone):"))
+            control_row = QHBoxLayout()
+            control_label = QLabel(control_url)
+            control_label.setStyleSheet(label_style)
+            control_label.setWordWrap(True)
+            control_label.setTextInteractionFlags(selectable)
+            copy_control_btn = QPushButton("⧉")
+            copy_control_btn.setFixedWidth(28)
+            copy_control_btn.setToolTip("Copy control-panel URL")
+            copy_control_btn.clicked.connect(
+                lambda: self._copy_to_clipboard(control_url, copy_control_btn)
+            )
+            control_row.addWidget(control_label)
+            control_row.addWidget(copy_control_btn)
+            web_layout.addLayout(control_row)
+
             open_lt_btn = QPushButton("🌐  Open Lower-third")
             open_full_btn = QPushButton("🌐  Open Full Transcript")
             open_bible_btn = QPushButton("🌐  Open Bible-only")
+            open_control_btn = QPushButton("🎛  Open Control Panel")
             open_lt_btn.clicked.connect(self._open_web_output)
             open_full_btn.clicked.connect(self._open_web_output_full)
             open_bible_btn.clicked.connect(self._open_web_output_bible)
+            open_control_btn.clicked.connect(self._open_web_control)
             web_layout.addWidget(open_lt_btn)
             web_layout.addWidget(open_full_btn)
             web_layout.addWidget(open_bible_btn)
+            web_layout.addWidget(open_control_btn)
         else:
             web_layout.addWidget(QLabel("⚠ Server unavailable"))
 
@@ -562,6 +640,13 @@ class MainWindow(QMainWindow):
         if self._web_server:
             webbrowser.open(self._web_server.url + "?bible=true")
 
+    @Slot()
+    def _open_web_control(self) -> None:
+        import webbrowser
+
+        if self._web_server:
+            webbrowser.open(self._web_server.control_url)
+
     def _copy_to_clipboard(self, text: str, button: QPushButton) -> None:
         QApplication.clipboard().setText(text)
         original = button.text()
@@ -655,6 +740,7 @@ class MainWindow(QMainWindow):
         self._engine_combo.setEnabled(False)
 
         self._start_worker(device_index)
+        self._push_state()
 
     def _start_worker(self, device_index: int) -> None:
         self._thread = QThread()
@@ -681,16 +767,37 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _on_pause(self) -> None:
+        """Pause button click — toggles based on current state."""
         if not self._paused:
-            self._paused = True
-            self._sig_pause.emit()
-            self._pause_btn.setText("▶  Resume")
-            self._set_status("Paused")
+            self._pause_transcription()
         else:
-            self._paused = False
-            self._sig_resume.emit()
-            self._pause_btn.setText("⏸  Pause")
-            self._set_status("Live")
+            self._resume_transcription()
+
+    @Slot()
+    def _pause_transcription(self) -> None:
+        """
+        Application-level pause operation. Shared by the Pause button and
+        the web control panel (POST /api/transcription/pause) — uses the
+        engine's existing pause semantics; the engine is never stopped.
+        """
+        if not self._session_active or self._paused:
+            return
+        self._paused = True
+        self._sig_pause.emit()
+        self._pause_btn.setText("▶  Resume")
+        self._set_status("Paused")
+        self._push_state()
+
+    @Slot()
+    def _resume_transcription(self) -> None:
+        """Application-level resume operation. See _pause_transcription()."""
+        if not self._session_active or not self._paused:
+            return
+        self._paused = False
+        self._sig_resume.emit()
+        self._pause_btn.setText("⏸  Pause")
+        self._set_status("Live")
+        self._push_state()
 
     @Slot()
     def _on_stop(self) -> None:
@@ -709,6 +816,7 @@ class MainWindow(QMainWindow):
         has_content = bool(self._manager.get_segments())
         self._save_btn.setEnabled(has_content)
         self._set_status("Disconnected")
+        self._push_state()
 
     def _stop_worker(self) -> None:
         if self._worker:
@@ -845,6 +953,7 @@ class MainWindow(QMainWindow):
                     self._bible_list.setCurrentItem(item)
                     break
         self._bible_list.blockSignals(False)
+        self._push_state()
 
     @Slot(object)
     def _on_bible_item_clicked(self, item: QListWidgetItem) -> None:
@@ -870,6 +979,7 @@ class MainWindow(QMainWindow):
 
     def _show_bible_ref(self, ref: BibleReference, *, auto_select: bool = True) -> None:
         self._selected_ref = ref
+        self._current_chunk_index = None
         self._bible_ref_label.setText(ref.display())
         self._populate_chunk_list(ref)
         # Default verse text: single verse or all verses in range
@@ -877,20 +987,121 @@ class MainWindow(QMainWindow):
         self._bible_verse_label.setText(verse_text)
         if auto_select:
             self._refresh_bible_list()
+        self._broadcast_current_bible()
+        self._push_state()
+
+    @Slot(str)
+    def _select_reference_by_key(self, key: str) -> None:
+        """
+        Application-level operation: select a reference already present in
+        the session's ReferenceHistory. Shared by the history list click
+        (PySide6) and the web control panel (POST /api/bible/select).
+
+        Only allows references that exist in ReferenceHistory — an unknown
+        key is silently ignored (the web layer validates before calling
+        this, but this method stays defensive since it is also reachable
+        directly).
+        """
+        ref = next(
+            (r for r in self._bible_history.get_all() if r.normalized_key() == key),
+            None,
+        )
+        if ref is None:
+            return
+        self._show_bible_ref(ref, auto_select=True)
+
+    @Slot(bool)
+    def _set_bible_visible(self, visible: bool) -> None:
+        """
+        Show/hide the Bible passage on the web output without clearing the
+        current reference. Shared by the web control panel
+        (POST /api/bible/visibility).
+        """
+        visible = bool(visible)
+        if visible == self._bible_visible:
+            return
+        self._bible_visible = visible
+        self._broadcast_current_bible()
+        self._push_state()
+
+    @Slot(str)
+    def _set_display_mode(self, mode: str) -> None:
+        """
+        Switch the web output between 'subtitles_bible' and 'bible_only'.
+        Purely a display setting — never touches transcription or Bible
+        detection. Shared by the web control panel (POST /api/display-mode).
+        """
+        if mode not in _VALID_DISPLAY_MODES or mode == self._display_mode:
+            return
+        self._display_mode = mode
+        self._push_state()
+
+    def _broadcast_current_bible(self) -> None:
+        """
+        Push the currently selected Bible reference/text to the web output,
+        respecting the bible_visible flag. Hiding sends an empty payload to
+        the output page without touching self._selected_ref, so re-showing
+        immediately restores the same passage.
+        """
+        if not self._web_server:
+            return
+        if self._bible_visible and self._selected_ref:
+            verse_text = self._get_verse_range_text(self._selected_ref)
+            self._web_server.broadcast_bible(self._selected_ref.display(), verse_text)
+        else:
+            self._web_server.broadcast_bible("", "")
+
+    def _build_state_snapshot(self) -> dict:
+        """
+        Assemble the canonical application-state snapshot broadcast to every
+        connected web client (output page + control panel) and cached by
+        the web server for command validation.
+        """
+        history = self._bible_history.get_all()
+        chunks = self._get_chunks()
+        return {
+            "type": "state",
+            "transcription": {
+                "running": self._session_active,
+                "paused": self._paused,
+            },
+            "bible": {
+                "current_reference": (
+                    self._selected_ref.display() if self._selected_ref else None
+                ),
+                "current_reference_key": (
+                    self._selected_ref.normalized_key()
+                    if self._selected_ref
+                    else None
+                ),
+                "visible": self._bible_visible,
+                "verse_chunks": [c.display() for c in chunks],
+                "current_chunk_index": self._current_chunk_index,
+            },
+            "display": {"mode": self._display_mode},
+            "reference_history": [
+                {"key": r.normalized_key(), "display": r.display()} for r in history
+            ],
+        }
+
+    def _push_state(self) -> None:
+        """Broadcast the current canonical state snapshot to web clients."""
         if self._web_server:
-            self._web_server.broadcast_bible(ref.display(), verse_text)
+            self._web_server.push_state(self._build_state_snapshot())
+
+    def _get_chunks(self) -> list[BibleReference]:
+        """2-verse chunks for the current reference, or [] if not ranged/none."""
+        ref = self._selected_ref
+        if ref is None or ref.verse_start is None or ref.verse_end is None:
+            return []
+        chunks = self._split_into_pairs(ref)
+        return chunks if len(chunks) > 1 else []
 
     def _populate_chunk_list(self, ref: BibleReference) -> None:
         """Populate the verse-pair navigator when ref spans multiple verses."""
         self._chunk_list.clear()
-        if ref.verse_start is None or ref.verse_end is None:
-            self._chunk_label.hide()
-            self._chunk_list.hide()
-            return
-
-        chunks = self._split_into_pairs(ref)
-        if len(chunks) <= 1:
-            # Single verse or single pair — no navigator needed
+        chunks = self._get_chunks()
+        if not chunks:
             self._chunk_label.hide()
             self._chunk_list.hide()
             return
@@ -919,11 +1130,28 @@ class MainWindow(QMainWindow):
 
     @Slot(QListWidgetItem)
     def _on_chunk_clicked(self, item: QListWidgetItem) -> None:
-        chunk: BibleReference = item.data(Qt.ItemDataRole.UserRole)
+        index = self._chunk_list.row(item)
+        self._select_chunk_by_index(index)
+
+    @Slot(int)
+    def _select_chunk_by_index(self, index: int) -> None:
+        """
+        Application-level operation: display one 2-verse chunk of the
+        current ranged reference. Shared by the desktop verse-pair
+        navigator and the web control panel
+        (POST /api/bible/chunk). Does not change the current reference
+        or the reference history — only the displayed verse text.
+        """
+        chunks = self._get_chunks()
+        if index < 0 or index >= len(chunks):
+            return
+        chunk = chunks[index]
+        self._current_chunk_index = index
         verse_text = self._get_verse_range_text(chunk)
         self._bible_verse_label.setText(verse_text)
-        if self._web_server:
+        if self._web_server and self._bible_visible:
             self._web_server.broadcast_bible(chunk.display(), verse_text)
+        self._push_state()
 
     def _get_verse_range_text(self, ref: BibleReference) -> str:
         if ref.verse_start is None:
@@ -943,15 +1171,17 @@ class MainWindow(QMainWindow):
     @Slot()
     def _clear_bible_ref(self) -> None:
         self._bible_context.clear()
+        self._bible_history.clear()
         self._selected_ref = None
+        self._current_chunk_index = None
         self._bible_list.clear()
         self._bible_ref_label.setText("—")
         self._bible_verse_label.setText("")
         self._chunk_list.clear()
         self._chunk_label.hide()
         self._chunk_list.hide()
-        if self._web_server:
-            self._web_server.broadcast_bible("", "")
+        self._broadcast_current_bible()
+        self._push_state()
 
     # ------------------------------------------------------------------
     # Cleanup

@@ -97,7 +97,7 @@ class DeepgramEngine(TranscriptionEngine):
                 encoding="linear16",
                 channels=1,
                 sample_rate=16_000,
-                interim_results=False,
+                interim_results=True,
                 punctuate=True,
                 smart_format=True,
             ) as socket:

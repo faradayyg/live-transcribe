@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Live Transcriber — Control</title>
+  <link rel="stylesheet" href="/static/control.css" />
+</head>
+<body>
+
+  <div id="app">
+    <header>
+      <h1>Live Transcriber</h1>
+      <div id="conn-dot" class="disconnected" title="Connection status"></div>
+    </header>
+
+    <div id="status-badge" class="badge disconnected">● DISCONNECTED</div>
+
+    <button id="pause-btn" class="big-btn primary" disabled>PAUSE</button>
+
+    <section class="block">
+      <h2>Display</h2>
+      <div class="toggle-row">
+        <button id="mode-subs-btn"  class="toggle-btn active">Subtitles + Bible</button>
+        <button id="mode-bible-btn" class="toggle-btn">Bible only</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>Bible</h2>
+      <button id="bible-visible-btn" class="big-btn secondary">HIDE BIBLE</button>
+    </section>
+
+    <section id="chunk-section" class="block hidden">
+      <h2>Verse pairs</h2>
+      <p class="hint">Tap a pair to display it as the reader reads:</p>
+      <ul id="chunk-list" class="chunk-list"></ul>
+    </section>
+
+    <section class="block">
+      <h2>Scripture</h2>
+      <ul id="ref-list" class="ref-list">
+        <li class="empty">No references yet</li>
+      </ul>
+    </section>
+  </div>
+
+  <div id="error-toast" class="hidden"></div>
+
+  <script src="/static/control.js"></script>
+</body>
+</html>
