@@ -29,6 +29,17 @@
     <section class="block">
       <h2>Bible</h2>
       <button id="bible-visible-btn" class="big-btn secondary">HIDE BIBLE</button>
+      <form id="manual-ref-form" class="manual-ref-form">
+        <input
+          id="manual-ref-input"
+          type="text"
+          placeholder="e.g. John 3:16 or Romans 8:1-4"
+          autocomplete="off"
+          autocapitalize="words"
+        />
+        <button type="submit" class="manual-ref-btn">Go</button>
+      </form>
+      <p id="manual-ref-error" class="field-error hidden"></p>
     </section>
 
     <section id="chunk-section" class="block hidden">

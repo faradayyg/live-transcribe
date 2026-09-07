@@ -25,6 +25,9 @@ const pauseBtnEl        = document.getElementById("pause-btn");
 const modeSubsBtnEl     = document.getElementById("mode-subs-btn");
 const modeBibleBtnEl    = document.getElementById("mode-bible-btn");
 const bibleVisibleBtnEl = document.getElementById("bible-visible-btn");
+const manualRefFormEl   = document.getElementById("manual-ref-form");
+const manualRefInputEl  = document.getElementById("manual-ref-input");
+const manualRefErrorEl  = document.getElementById("manual-ref-error");
 const chunkSectionEl    = document.getElementById("chunk-section");
 const chunkListEl       = document.getElementById("chunk-list");
 const refListEl         = document.getElementById("ref-list");
@@ -187,9 +190,13 @@ async function postJSON(path, body) {
       let msg = "Request failed.";
       try { msg = (await res.json()).error || msg; } catch { /* ignore */ }
       showError(msg);
+      return { ok: false, error: msg };
     }
+    return { ok: true };
   } catch {
-    showError("Network error — check the connection.");
+    const msg = "Network error — check the connection.";
+    showError(msg);
+    return { ok: false, error: msg };
   }
 }
 
@@ -212,6 +219,19 @@ function selectReference(key) { postJSON("/api/bible/select", { key }); }
 
 function selectChunk(index) { postJSON("/api/bible/chunk", { index }); }
 
+async function submitManualReference(text) {
+  manualRefErrorEl.classList.add("hidden");
+  const result = await postJSON("/api/bible/manual", { text });
+  if (result.ok) {
+    manualRefInputEl.value = "";
+  } else {
+    // Show inline under the field as well as the toast, since this is a
+    // form the operator is actively typing into.
+    manualRefErrorEl.textContent = result.error;
+    manualRefErrorEl.classList.remove("hidden");
+  }
+}
+
 function showError(message) {
   errorToastEl.textContent = message;
   errorToastEl.classList.remove("hidden");
@@ -227,6 +247,11 @@ pauseBtnEl.addEventListener("click", togglePause);
 modeSubsBtnEl.addEventListener("click", () => setDisplayMode("subtitles_bible"));
 modeBibleBtnEl.addEventListener("click", () => setDisplayMode("bible_only"));
 bibleVisibleBtnEl.addEventListener("click", toggleBibleVisible);
+manualRefFormEl.addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const text = manualRefInputEl.value.trim();
+  if (text) submitManualReference(text);
+});
 
 // -----------------------------------------------------------------------
 // Start

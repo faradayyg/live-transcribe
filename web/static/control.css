@@ -107,6 +107,47 @@ h2 {
 .big-btn.secondary { background: #33334a; }
 .big-btn.secondary.hidden-state { background: var(--red); }
 
+/* ---- Manual reference entry ------------------------------------------ */
+
+.manual-ref-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.manual-ref-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 12px;
+  font-size: 1em;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+}
+.manual-ref-form input:focus {
+  outline: none;
+  border-color: var(--accent-bright);
+}
+
+.manual-ref-btn {
+  padding: 14px 20px;
+  font-size: 1em;
+  font-weight: 700;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.manual-ref-btn:active { transform: scale(0.97); }
+
+.field-error {
+  margin: 8px 0 0;
+  color: #ff8a80;
+  font-size: 0.85em;
+}
+
 .block {
   background: var(--panel);
   border: 1px solid var(--border);

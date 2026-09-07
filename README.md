@@ -407,6 +407,11 @@ PySide6 window:
   navigator, so the operator can tap along pair-by-pair as the reader reads
   a long passage, from a phone. Tapping a pair updates the output page
   immediately without changing the reference history or selection.
+- **Manual reference entry** — a text field (mirroring the desktop app's
+  manual lookup) lets the operator type any reference (e.g. `Romans 8:1-4`)
+  and display it directly, without waiting for it to be spoken. Parsed with
+  the same local detector used everywhere else in the app; an unparseable
+  entry shows an inline error and leaves the current state unchanged.
 
 All state shown in the control panel — and on the output page — comes from
 one canonical application state owned by the main window and broadcast over
@@ -441,7 +446,7 @@ Set `LOG_LEVEL=DEBUG` in `.env` to enable verbose output from all modules.
 pytest tests/ -v
 ```
 
-162 tests covering:
+167 tests covering:
 
 - Bible reference parsing (written + spoken forms, ranges, rapid-fire)
 - `is_candidate()` gate and `_parse_response()` normalisation
@@ -456,8 +461,9 @@ pytest tests/ -v
 - Missing API key error paths
 - Web server broadcast and init state
 - Web Control Panel: pause/resume, reference selection (valid/invalid),
-  hide/show Bible, display-mode switching, verse-pair navigator, canonical
-  state broadcast, and multi-client synchronization
+  hide/show Bible, display-mode switching, verse-pair navigator, manual
+  reference entry, canonical state broadcast, and multi-client
+  synchronization
 
 Audio capture and live API calls require a microphone and API key and are
 validated manually.

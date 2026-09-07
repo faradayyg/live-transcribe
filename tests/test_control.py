@@ -59,6 +59,7 @@ class FakeApp:
             set_bible_visible=self.set_bible_visible,
             set_display_mode=self.set_display_mode,
             select_chunk=self.select_chunk,
+            manual_reference=self.manual_reference,
         )
 
     def add_reference(self, key: str, display: str) -> None:
@@ -105,6 +106,25 @@ class FakeApp:
         if index < 0 or index >= len(self.verse_chunks):
             return
         self.current_chunk_index = index
+        self.push_state()
+
+    def manual_reference(self, text: str) -> None:
+        """
+        Mirrors MainWindow._manual_ref_from_web(): parse using the real
+        local detector (already validated server-side before this is
+        called) and add/select it, exactly like detecting one from speech.
+        """
+        from bible import detector as bible_detector
+
+        refs = bible_detector.detect_all(text.strip())
+        if not refs:
+            return
+        ref = refs[0]
+        key, display = ref.normalized_key(), ref.display()
+        self.history = [(k, d) for k, d in self.history if k != key]
+        self.history.insert(0, (key, display))
+        self.current_ref = (key, display)
+        self.current_chunk_index = None
         self.push_state()
 
     def set_bible_visible(self, visible: bool) -> None:
@@ -367,6 +387,44 @@ class TestVersePairNavigator:
             _post(app.port, "/api/bible/chunk", {"index": 1})
             msg = _drain_to_state(ws)
             assert msg["bible"]["current_chunk_index"] == 1
+
+
+# ---------------------------------------------------------------------------
+# 5c. Manual reference entry
+# ---------------------------------------------------------------------------
+
+
+class TestManualReference:
+    def test_valid_reference_selected_and_added_to_history(self, app):
+        status, body = _post(app.port, "/api/bible/manual", {"text": "John 3:16"})
+        assert status == 200
+        assert body["ok"] is True
+        assert app.current_ref is not None
+        assert app.current_ref[1] == "John 3:16"
+        assert any(d == "John 3:16" for _, d in app.history)
+
+    def test_unparseable_text_rejected_with_clear_error(self, app):
+        status, body = _post(app.port, "/api/bible/manual", {"text": "not a verse"})
+        assert status == 400
+        assert "error" in body
+        assert app.current_ref is None
+        assert app.history == []
+
+    def test_missing_text_rejected(self, app):
+        status, body = _post(app.port, "/api/bible/manual", {})
+        assert status == 400
+
+    def test_blank_text_rejected(self, app):
+        status, body = _post(app.port, "/api/bible/manual", {"text": "   "})
+        assert status == 400
+        assert app.current_ref is None
+
+    def test_manual_reference_broadcasts_state(self, app):
+        with _ws_connect(app.port) as ws:
+            _recv_json(ws)  # init
+            _post(app.port, "/api/bible/manual", {"text": "Romans 8:1-4"})
+            msg = _drain_to_state(ws)
+            assert msg["bible"]["current_reference"] == "Romans 8:1-4"
 
 
 # ---------------------------------------------------------------------------

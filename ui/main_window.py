@@ -193,6 +193,7 @@ class ControlBridge(QObject):
     set_bible_visible_requested = Signal(bool)
     set_display_mode_requested = Signal(str)
     select_chunk_requested = Signal(int)
+    manual_reference_requested = Signal(str)
 
 
 # ---------------------------------------------------------------------------
@@ -253,6 +254,9 @@ class MainWindow(QMainWindow):
         self._control_bridge.select_chunk_requested.connect(
             self._select_chunk_by_index
         )
+        self._control_bridge.manual_reference_requested.connect(
+            self._manual_ref_from_web
+        )
 
         # Start the web output server (runs in its own background thread)
         self._web_server = WebOutputServer()
@@ -272,6 +276,7 @@ class MainWindow(QMainWindow):
                 set_bible_visible=self._control_bridge.set_bible_visible_requested.emit,
                 set_display_mode=self._control_bridge.set_display_mode_requested.emit,
                 select_chunk=self._control_bridge.select_chunk_requested.emit,
+                manual_reference=self._control_bridge.manual_reference_requested.emit,
             )
 
         self._build_ui()
@@ -972,7 +977,23 @@ class MainWindow(QMainWindow):
             self._ref_error_label.setText(f'Could not parse "{text}"')
             return
         self._ref_error_label.setText("")
-        ref = refs[0]
+        self._display_manual_reference(refs[0])
+
+    @Slot(str)
+    def _manual_ref_from_web(self, text: str) -> None:
+        """
+        Application-level operation: parse and display an operator-entered
+        reference. Shared by the desktop manual-lookup field
+        (_on_manual_ref_display) and the web control panel
+        (POST /api/bible/manual, which already validated that `text`
+        parses before invoking this).
+        """
+        refs = bible_detector.detect_all(text.strip())
+        if not refs:
+            return
+        self._display_manual_reference(refs[0])
+
+    def _display_manual_reference(self, ref: BibleReference) -> None:
         # Add to session history so it appears in the detected list
         self._bible_history.add_or_upgrade(ref)
         self._show_bible_ref(ref, auto_select=True)

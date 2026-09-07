@@ -17,6 +17,10 @@ POST /api/transcription/resume  → resume transcription
 POST /api/bible/select          → {"key": "<normalized_key>"} select a history entry
 POST /api/bible/visibility      → {"visible": true|false} show/hide Bible on output
 POST /api/display-mode          → {"mode": "subtitles_bible"|"bible_only"}
+POST /api/bible/chunk           → {"index": 0} display one verse-pair chunk of a
+                                   ranged reference (see bible.verse_chunks)
+POST /api/bible/manual          → {"text": "Romans 8:1-4"} parse and display a
+                                   manually-entered reference (added to history)
 
 WebSocket protocol (server → client, all JSON)
 -----------------------------------------------
@@ -59,6 +63,8 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from aiohttp import web
+
+from bible import detector as bible_detector
 
 log = logging.getLogger(__name__)
 
@@ -115,6 +121,7 @@ class WebOutputServer:
         self._set_bible_visible_cb: Optional[Callable[[bool], None]] = None
         self._set_display_mode_cb: Optional[Callable[[str], None]] = None
         self._select_chunk_cb: Optional[Callable[[int], None]] = None
+        self._manual_reference_cb: Optional[Callable[[str], None]] = None
 
         # Background thread
         self._thread: Optional[threading.Thread] = None
@@ -145,6 +152,7 @@ class WebOutputServer:
         set_bible_visible: Callable[[bool], None],
         set_display_mode: Callable[[str], None],
         select_chunk: Callable[[int], None],
+        manual_reference: Callable[[str], None],
     ) -> None:
         """
         Register the application-level operations invoked by /control.
@@ -159,6 +167,7 @@ class WebOutputServer:
         self._set_bible_visible_cb = set_bible_visible
         self._set_display_mode_cb = set_display_mode
         self._select_chunk_cb = select_chunk
+        self._manual_reference_cb = manual_reference
 
     def push_state(self, state: dict) -> None:
         """
@@ -253,6 +262,7 @@ class WebOutputServer:
         app.router.add_post("/api/bible/visibility",     self._handle_bible_visibility)
         app.router.add_post("/api/display-mode",         self._handle_display_mode)
         app.router.add_post("/api/bible/chunk",          self._handle_select_chunk)
+        app.router.add_post("/api/bible/manual",         self._handle_manual_reference)
         app.router.add_static("/static", _STATIC_DIR)
 
         self._runner = web.AppRunner(app)
@@ -405,6 +415,33 @@ class WebOutputServer:
         if self._select_chunk_cb is None:
             return web.json_response({"error": "Control unavailable."}, status=503)
         self._select_chunk_cb(index)
+        return web.json_response({"ok": True})
+
+    async def _handle_manual_reference(self, request: web.Request) -> web.Response:
+        """
+        Parse an operator-entered reference (e.g. "Romans 8:1-4") and, if
+        valid, display it — mirroring the desktop app's manual reference
+        lookup field. Parsing is done here (using the same local detector
+        as everywhere else in the app) purely so an invalid reference can
+        be rejected with a clear error message; the actual "add to history
+        and display" operation still lives in MainWindow, shared with the
+        desktop UI.
+        """
+        body = await self._read_json(request)
+        if body is None:
+            return web.json_response({"error": "Invalid JSON body."}, status=400)
+        text = body.get("text")
+        if not text or not isinstance(text, str) or not text.strip():
+            return web.json_response({"error": "Missing 'text'."}, status=400)
+        text = text.strip()
+        refs = bible_detector.detect_all(text)
+        if not refs:
+            return web.json_response(
+                {"error": f'Could not parse "{text}".'}, status=400
+            )
+        if self._manual_reference_cb is None:
+            return web.json_response({"error": "Control unavailable."}, status=503)
+        self._manual_reference_cb(text)
         return web.json_response({"ok": True})
 
     @staticmethod
