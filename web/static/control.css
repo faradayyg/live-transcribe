@@ -17,14 +17,19 @@
   --red: #c0392b;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
   -webkit-tap-highlight-color: transparent;
   /* ~2pt smaller than the 16px (12pt) browser default; all other rules are
      sized in em, so this scales the whole panel down uniformly. */
@@ -65,9 +70,15 @@ h2 {
   background: #666;
   flex-shrink: 0;
 }
-#conn-dot.connected     { background: var(--green); }
-#conn-dot.reconnecting  { background: var(--amber); }
-#conn-dot.disconnected  { background: var(--red); }
+#conn-dot.connected {
+  background: var(--green);
+}
+#conn-dot.reconnecting {
+  background: var(--amber);
+}
+#conn-dot.disconnected {
+  background: var(--red);
+}
 
 /* ---- Status symbol + Pause button, side by side ----------------------- */
 
@@ -81,23 +92,39 @@ h2 {
 .status-symbol {
   flex: 0 0 auto;
   width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4em;
+  font-size: 1.2em;
   font-weight: 700;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.05);
 }
-.status-symbol.live         { color: var(--green); }
-.status-symbol.paused       { color: var(--accent-bright); }
-.status-symbol.error        { color: var(--red); }
-.status-symbol.disconnected { color: var(--muted); }
-.status-symbol.connecting   { color: var(--amber); }
+.status-symbol.live {
+  color: var(--green);
+}
+.status-symbol.paused {
+  color: var(--accent-bright);
+}
+.status-symbol.error {
+  color: var(--red);
+}
+.status-symbol.disconnected {
+  color: var(--muted);
+}
+.status-symbol.connecting {
+  color: var(--amber);
+}
 
 .status-row .big-btn {
   flex: 1;
+  height: 48px;
   margin: 0;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ---- Big touch-friendly buttons -------------------------------------- */
@@ -115,20 +142,33 @@ h2 {
   color: #fff;
   background: var(--accent);
   cursor: pointer;
-  transition: transform 0.05s ease, opacity 0.15s ease;
+  transition:
+    transform 0.05s ease,
+    opacity 0.15s ease;
 }
-.big-btn:active { transform: scale(0.98); }
-.big-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.big-btn:active {
+  transform: scale(0.98);
+}
+.big-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
-.big-btn.primary   {
+.big-btn.primary {
   background: var(--green);
   padding: 12px;
   font-size: 1em;
-  margin: 4px 0 16px;
 }
-.big-btn.primary.paused { background: var(--amber); color: #201800; }
-.big-btn.secondary { background: #33334a; }
-.big-btn.secondary.hidden-state { background: var(--red); }
+.big-btn.primary.paused {
+  background: var(--amber);
+  color: #201800;
+}
+.big-btn.secondary {
+  background: #33334a;
+}
+.big-btn.secondary.hidden-state {
+  background: var(--red);
+}
 
 /* ---- Manual reference entry ------------------------------------------ */
 
@@ -163,7 +203,9 @@ h2 {
   color: #fff;
   cursor: pointer;
 }
-.manual-ref-btn:active { transform: scale(0.97); }
+.manual-ref-btn:active {
+  transform: scale(0.97);
+}
 
 .field-error {
   margin: 8px 0 0;
@@ -218,8 +260,12 @@ h2 {
   cursor: pointer;
   user-select: none;
 }
-.ref-list li:last-child { border-bottom: none; }
-.ref-list li:active { background: rgba(255, 255, 255, 0.05); }
+.ref-list li:last-child {
+  border-bottom: none;
+}
+.ref-list li:active {
+  background: rgba(255, 255, 255, 0.05);
+}
 
 .ref-list li.current {
   color: #fff;
@@ -268,7 +314,9 @@ h2 {
   cursor: pointer;
   user-select: none;
 }
-.chunk-list li:active { transform: scale(0.97); }
+.chunk-list li:active {
+  transform: scale(0.97);
+}
 
 .chunk-list li.current {
   background: var(--accent);
@@ -294,4 +342,6 @@ h2 {
   z-index: 100;
 }
 
-.hidden { display: none !important; }
+.hidden {
+  display: none !important;
+}
