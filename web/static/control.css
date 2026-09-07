@@ -71,9 +71,10 @@ h2 {
   text-align: center;
   font-weight: 700;
   letter-spacing: 0.04em;
-  padding: 8px;
+  padding: 6px;
   border-radius: 8px;
-  margin: 8px 0 16px;
+  margin: 4px 0 12px;
+  font-size: 0.9em;
   background: rgba(255, 255, 255, 0.05);
 }
 .badge.live         { color: var(--green); }
@@ -102,7 +103,12 @@ h2 {
 .big-btn:active { transform: scale(0.98); }
 .big-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.big-btn.primary   { background: var(--green); }
+.big-btn.primary   {
+  background: var(--green);
+  padding: 12px;
+  font-size: 1em;
+  margin: 4px 0 16px;
+}
 .big-btn.primary.paused { background: var(--amber); color: #201800; }
 .big-btn.secondary { background: #33334a; }
 .big-btn.secondary.hidden-state { background: var(--red); }
