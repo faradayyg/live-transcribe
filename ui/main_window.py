@@ -979,11 +979,18 @@ class MainWindow(QMainWindow):
 
     def _show_bible_ref(self, ref: BibleReference, *, auto_select: bool = True) -> None:
         self._selected_ref = ref
-        self._current_chunk_index = None
         self._bible_ref_label.setText(ref.display())
         self._populate_chunk_list(ref)
-        # Default verse text: single verse or all verses in range
-        verse_text = self._get_verse_range_text(ref)
+        chunks = self._get_chunks()
+        if chunks:
+            # Long passages: start on the first 2-verse pair; the rest are
+            # listed in the verse-pair navigator for the operator to click
+            # through as the reader reads.
+            self._current_chunk_index = 0
+            verse_text = self._get_verse_range_text(chunks[0])
+        else:
+            self._current_chunk_index = None
+            verse_text = self._get_verse_range_text(ref)
         self._bible_verse_label.setText(verse_text)
         if auto_select:
             self._refresh_bible_list()
@@ -1042,14 +1049,34 @@ class MainWindow(QMainWindow):
         respecting the bible_visible flag. Hiding sends an empty payload to
         the output page without touching self._selected_ref, so re-showing
         immediately restores the same passage.
+
+        For long (ranged) references, this reflects whichever verse-pair
+        chunk is currently selected (defaulting to the first pair) rather
+        than the entire range at once — matching what is shown locally.
         """
         if not self._web_server:
             return
         if self._bible_visible and self._selected_ref:
-            verse_text = self._get_verse_range_text(self._selected_ref)
-            self._web_server.broadcast_bible(self._selected_ref.display(), verse_text)
+            ref_display, verse_text = self._current_display_text()
+            self._web_server.broadcast_bible(ref_display, verse_text)
         else:
             self._web_server.broadcast_bible("", "")
+
+    def _current_display_text(self) -> tuple[str, str]:
+        """
+        Return the (reference display, verse text) currently shown for
+        self._selected_ref — the active verse-pair chunk if one is
+        selected, otherwise the full reference.
+        """
+        chunks = self._get_chunks()
+        if (
+            chunks
+            and self._current_chunk_index is not None
+            and 0 <= self._current_chunk_index < len(chunks)
+        ):
+            chunk = chunks[self._current_chunk_index]
+            return chunk.display(), self._get_verse_range_text(chunk)
+        return self._selected_ref.display(), self._get_verse_range_text(self._selected_ref)
 
     def _build_state_snapshot(self) -> dict:
         """
@@ -1147,10 +1174,8 @@ class MainWindow(QMainWindow):
             return
         chunk = chunks[index]
         self._current_chunk_index = index
-        verse_text = self._get_verse_range_text(chunk)
-        self._bible_verse_label.setText(verse_text)
-        if self._web_server and self._bible_visible:
-            self._web_server.broadcast_bible(chunk.display(), verse_text)
+        self._bible_verse_label.setText(self._get_verse_range_text(chunk))
+        self._broadcast_current_bible()
         self._push_state()
 
     def _get_verse_range_text(self, ref: BibleReference) -> str:

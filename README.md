@@ -307,9 +307,12 @@ immediately — no transcription required.
 ### Verse-pair navigator
 
 When a ranged reference is detected or entered (e.g. *Romans 8:1–17*), the
-panel shows a row of clickable 2-verse chunk buttons (*Romans 8:1–2*,
-*Romans 8:3–4*, …). The operator can step through them manually to keep the
-overlay in sync with the reader without changing the session history.
+overlay and control panel start on the **first 2-verse pair** (*Romans
+8:1–2*) rather than dumping the whole passage at once. The panel also shows
+a row of clickable 2-verse chunk buttons for the rest of the range (*Romans
+8:1–2*, *Romans 8:3–4*, …) so the operator can step through them manually to
+keep the overlay in sync with the reader, without changing the session
+history or the detected reference.
 
 ### Supported reference forms
 
