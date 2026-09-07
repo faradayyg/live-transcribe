@@ -109,17 +109,20 @@ function renderTranscription(t) {
 
   if (!running) {
     pauseBtnEl.textContent = "PAUSE";
-    statusBadgeEl.textContent = "● DISCONNECTED";
-    statusBadgeEl.className = "badge disconnected";
+    setStatusSymbol("●", "disconnected", "Disconnected");
   } else if (paused) {
     pauseBtnEl.textContent = "START";
-    statusBadgeEl.textContent = "⏸ PAUSED";
-    statusBadgeEl.className = "badge paused";
+    setStatusSymbol("⏸", "paused", "Paused");
   } else {
     pauseBtnEl.textContent = "PAUSE";
-    statusBadgeEl.textContent = "● LIVE";
-    statusBadgeEl.className = "badge live";
+    setStatusSymbol("●", "live", "Live");
   }
+}
+
+function setStatusSymbol(symbol, state, label) {
+  statusBadgeEl.textContent = symbol;
+  statusBadgeEl.className = `status-symbol ${state}`;
+  statusBadgeEl.title = label;
 }
 
 function renderDisplayMode(display) {
