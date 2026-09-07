@@ -11,6 +11,7 @@ Bottom panel : Bible reference display
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 import logging
@@ -1138,9 +1139,26 @@ class MainWindow(QMainWindow):
             self._web_server.push_state(self._build_state_snapshot())
 
     def _get_chunks(self) -> list[BibleReference]:
-        """2-verse chunks for the current reference, or [] if not ranged/none."""
+        """
+        2-verse chunks for the current reference, or [] if not ranged/none.
+
+        A whole-chapter reference (e.g. "Psalm 23", no verse given) is
+        chunked across every verse in the chapter, same as an explicit
+        range — so long chapters get the same pair-by-pair navigation.
+        """
         ref = self._selected_ref
-        if ref is None or ref.verse_start is None or ref.verse_end is None:
+        if ref is None:
+            return []
+        if ref.verse_start is None:
+            chapter_verses = bible_detector.lookup_chapter_verses(
+                ref.book, ref.chapter
+            )
+            if not chapter_verses:
+                return []
+            ref = replace(
+                ref, verse_start=1, verse_end=max(chapter_verses.keys())
+            )
+        elif ref.verse_end is None:
             return []
         chunks = self._split_into_pairs(ref)
         return chunks if len(chunks) > 1 else []
@@ -1164,7 +1182,6 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _split_into_pairs(ref: BibleReference) -> list[BibleReference]:
         """Split a ranged reference into 2-verse chunks."""
-        from dataclasses import replace
         vs = ref.verse_start
         ve = ref.verse_end
         chunks: list[BibleReference] = []
@@ -1201,7 +1218,16 @@ class MainWindow(QMainWindow):
 
     def _get_verse_range_text(self, ref: BibleReference) -> str:
         if ref.verse_start is None:
-            return ""
+            # Book + chapter only (e.g. "Psalm 23") — load every verse in
+            # the chapter rather than showing nothing.
+            chapter_verses = bible_detector.lookup_chapter_verses(
+                ref.book, ref.chapter
+            )
+            if not chapter_verses:
+                return ""
+            return "\n".join(
+                f"{v}  {text}" for v, text in sorted(chapter_verses.items())
+            )
         if ref.verse_end is None:
             return (
                 bible_detector.lookup_verse(ref.book, ref.chapter, ref.verse_start)

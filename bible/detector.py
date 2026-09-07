@@ -202,6 +202,44 @@ def lookup_verse(book: str, chapter: int, verse: int) -> Optional[str]:
     return db.get("verses", {}).get(key)
 
 
+def lookup_chapter_verses(book: str, chapter: int) -> dict[int, str]:
+    """
+    Return {verse_number: text} for every verse in *book* chapter, or {}
+    if the chapter is unavailable. Used when a reference names only a
+    book and chapter (e.g. "Psalm 23") so the full chapter can be loaded
+    rather than showing nothing.
+    """
+    db = _load_verse_db()
+    if not db:
+        return {}
+
+    # Complete KJV format
+    kjv_book = _KJV_BOOK_MAP.get(book, book)
+    book_data = db.get(kjv_book)
+    if isinstance(book_data, dict):
+        ch_data = book_data.get(str(chapter))
+        if isinstance(ch_data, dict):
+            result: dict[int, str] = {}
+            for v_str, text in ch_data.items():
+                try:
+                    result[int(v_str)] = text
+                except ValueError:
+                    continue
+            return result
+
+    # Legacy stub format
+    prefix = f"{book}:{chapter}:"
+    result = {}
+    for key, text in db.get("verses", {}).items():
+        if key.startswith(prefix):
+            try:
+                result[int(key.split(":")[2])] = text
+            except (IndexError, ValueError):
+                continue
+    return result
+
+
+
 # ---------------------------------------------------------------------------
 # Core detector
 # ---------------------------------------------------------------------------

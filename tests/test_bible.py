@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 from bible.parser import resolve_book
-from bible.detector import detect
+from bible.detector import detect, lookup_chapter_verses, lookup_verse
 from transcript.models import BibleReference
 
 
@@ -157,3 +157,25 @@ class TestDetectInvalid:
         ref = detect(text)
         assert ref is not None
         assert ref.book == "John"
+
+
+# ---------------------------------------------------------------------------
+# lookup_chapter_verses — full-chapter lookup for book+chapter-only refs
+# ---------------------------------------------------------------------------
+
+class TestLookupChapterVerses:
+    def test_returns_every_verse_in_chapter(self):
+        verses = lookup_chapter_verses("Psalm", 23)
+        assert verses  # Psalm 23 should be present in the local KJV data
+        assert set(verses.keys()) == set(range(1, max(verses.keys()) + 1))
+
+    def test_matches_lookup_verse_per_verse(self):
+        verses = lookup_chapter_verses("Psalm", 23)
+        for v, text in verses.items():
+            assert lookup_verse("Psalm", 23, v) == text
+
+    def test_unknown_book_returns_empty_dict(self):
+        assert lookup_chapter_verses("NotABook", 1) == {}
+
+    def test_unknown_chapter_returns_empty_dict(self):
+        assert lookup_chapter_verses("Psalm", 9999) == {}

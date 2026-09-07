@@ -314,6 +314,14 @@ a row of clickable 2-verse chunk buttons for the rest of the range (*Romans
 keep the overlay in sync with the reader, without changing the session
 history or the detected reference.
 
+Book-and-chapter-only references (e.g. *Psalm 23*, no verse spoken/entered)
+are handled the same way: the full chapter is loaded from the local KJV data
+and paginated into the same 2-verse chunks, so long chapters (Psalm 119,
+etc.) get the same click-through navigation instead of showing nothing or
+dumping the entire chapter at once. The displayed reference label still
+reads the plain chapter reference (e.g. *Psalm 23*); only the verse text
+shown at any moment is scoped to the current chunk.
+
 ### Supported reference forms
 
 ```
@@ -446,7 +454,7 @@ Set `LOG_LEVEL=DEBUG` in `.env` to enable verbose output from all modules.
 pytest tests/ -v
 ```
 
-167 tests covering:
+171 tests covering:
 
 - Bible reference parsing (written + spoken forms, ranges, rapid-fire)
 - `is_candidate()` gate and `_parse_response()` normalisation
@@ -464,6 +472,8 @@ pytest tests/ -v
   hide/show Bible, display-mode switching, verse-pair navigator, manual
   reference entry, canonical state broadcast, and multi-client
   synchronization
+- Full-chapter verse lookup (`lookup_chapter_verses`) for book+chapter-only
+  references
 
 Audio capture and live API calls require a microphone and API key and are
 validated manually.
