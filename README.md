@@ -383,16 +383,27 @@ panel.
 
 ## Web Control Panel
 
-A mobile-friendly control page is available at:
+A control page is available at:
 
 ```text
 http://localhost:8765/control
 ```
 
 (use the computer's LAN IP instead of `localhost` to control the app from a
-phone or tablet on the same network — e.g. `http://192.168.1.23:8765/control`).
-The URL is also shown, with a copy button and an "Open Control Panel" button,
-in the **Web Output** panel of the main window.
+phone or tablet on the same network — e.g. `http://192.168.1.23:8765/control`,
+or to embed it as a custom browser dock in OBS running on the same or a
+different machine). The URL is also shown, with a copy button and an "Open
+Control Panel" button, in the **Web Output** panel of the main window.
+
+**Designed to be embedded as an OBS "Custom Browser Dock"** (`View →
+Docks → Custom Browser Docks…`, using the `/control` URL above), sitting
+alongside OBS's own panels so the operator can run the service without
+leaving OBS or touching the PySide6 window. The layout is compact and
+mouse/keyboard-oriented by default (small buttons, hover states, no wasted
+padding) to fit comfortably in a narrow dock; a `pointer: coarse` media
+query automatically restores larger touch targets when the page happens to
+be opened on an actual phone or tablet, so opening it directly from a mobile
+browser still works well.
 
 The control panel lets an operator run the service without touching the
 PySide6 window:
