@@ -376,14 +376,23 @@ viewport. Text expands upward as needed. The Bible verse overlay takes
 full precedence over the subtitle in lower-third mode.
 
 **Scripture styling** is deliberately distinct from the subtitle so a
-detected verse visually announces itself rather than just swapping text:
-a warm gold reference badge (with a small ✦ mark), a large decorative
-quotation mark, a gold accent bar beside the verse text, and a brief
-"pop" entrance animation (scale + fade) that replays every time a new
-reference or verse-pair chunk is displayed. In Bible-only mode the verse
-sits in its own card with a soft gradient gold border and glow, still
-bottom-anchored like the rest of the overlay. Respects
-`prefers-reduced-motion` (the pop animation is skipped).
+detected verse visually announces itself rather than just swapping text.
+Two styles are available, switchable live from the **Bible style** dropdown
+on the [control panel](#web-control-panel) (canonical state:
+`display.bible_style`, applied instantly to every connected output page —
+no page refresh needed):
+
+- **Gold** (default) — a warm gold reference badge (with a small ✦ mark), a
+  large decorative quotation mark, a gold accent bar beside the verse text,
+  and a brief "pop" entrance animation (scale + fade) that replays every
+  time a new reference or verse-pair chunk is displayed. In Bible-only mode
+  the verse sits in its own card with a soft gradient gold border and glow.
+- **Classic** — the plain, transparent style used before the gold redesign
+  (soft blue reference text, no badge/card chrome, no animation) for anyone
+  who prefers a minimal look.
+
+Both styles remain bottom-anchored, per the rest of the overlay, and respect
+`prefers-reduced-motion` (the pop animation is skipped either way).
 
 The page auto-reconnects if the app is restarted. The current Scripture
 display updates whenever the operator selects a reference in the Scripture
@@ -431,6 +440,11 @@ PySide6 window:
   on the output page. This only changes what is rendered; it never pauses
   transcription, disables Bible detection, or affects `?bible=true`, which
   remains a hard per-browser override for a dedicated OBS scene.
+- **Bible style** — a dropdown to switch the output page's verse styling
+  between **Gold** (the default badge/card look) and **Classic** (the
+  plain transparent style used before it). Purely an appearance setting;
+  never touches the current reference, transcription, or Bible detection.
+  See [Web output](#web-output) for what each style looks like.
 - **Verse-pair navigator** — when the current reference spans more than two
   verses, the panel shows the same 2-verse chunks as the desktop app's
   navigator, so the operator can tap along pair-by-pair as the reader reads
@@ -475,7 +489,7 @@ Set `LOG_LEVEL=DEBUG` in `.env` to enable verbose output from all modules.
 pytest tests/ -v
 ```
 
-171 tests covering:
+176 tests covering:
 
 - Bible reference parsing (written + spoken forms, ranges, rapid-fire)
 - `is_candidate()` gate and `_parse_response()` normalisation
@@ -490,9 +504,9 @@ pytest tests/ -v
 - Missing API key error paths
 - Web server broadcast and init state
 - Web Control Panel: pause/resume, reference selection (valid/invalid),
-  hide/show Bible, display-mode switching, verse-pair navigator, manual
-  reference entry, canonical state broadcast, and multi-client
-  synchronization
+  hide/show Bible, display-mode switching, Bible style switching
+  (valid/invalid), verse-pair navigator, manual reference entry, canonical
+  state broadcast, and multi-client synchronization
 - Full-chapter verse lookup (`lookup_chapter_verses`) for book+chapter-only
   references
 

@@ -170,6 +170,7 @@ _STATUS_COLORS = {
 }
 
 _VALID_DISPLAY_MODES = ("subtitles_bible", "bible_only")
+_VALID_BIBLE_STYLES = ("gold", "classic")
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +194,7 @@ class ControlBridge(QObject):
     select_reference_requested = Signal(str)
     set_bible_visible_requested = Signal(bool)
     set_display_mode_requested = Signal(str)
+    set_bible_style_requested = Signal(str)
     select_chunk_requested = Signal(int)
     manual_reference_requested = Signal(str)
 
@@ -226,6 +228,7 @@ class MainWindow(QMainWindow):
         self._paused = False
         self._bible_visible = True
         self._display_mode = "subtitles_bible"
+        self._bible_style = "gold"
         self._current_chunk_index: Optional[int] = None
         self._selected_provider = "Deepgram"  # default
 
@@ -252,6 +255,9 @@ class MainWindow(QMainWindow):
         self._control_bridge.set_display_mode_requested.connect(
             self._set_display_mode
         )
+        self._control_bridge.set_bible_style_requested.connect(
+            self._set_bible_style
+        )
         self._control_bridge.select_chunk_requested.connect(
             self._select_chunk_by_index
         )
@@ -276,6 +282,7 @@ class MainWindow(QMainWindow):
                 select_reference=self._control_bridge.select_reference_requested.emit,
                 set_bible_visible=self._control_bridge.set_bible_visible_requested.emit,
                 set_display_mode=self._control_bridge.set_display_mode_requested.emit,
+                set_bible_style=self._control_bridge.set_bible_style_requested.emit,
                 select_chunk=self._control_bridge.select_chunk_requested.emit,
                 manual_reference=self._control_bridge.manual_reference_requested.emit,
             )
@@ -1065,6 +1072,20 @@ class MainWindow(QMainWindow):
         self._display_mode = mode
         self._push_state()
 
+    @Slot(str)
+    def _set_bible_style(self, style: str) -> None:
+        """
+        Switch the web output's Bible verse styling between 'gold' (the
+        default gradient/badge look) and 'classic' (the plain transparent
+        style used before it). Purely a display/appearance setting — never
+        touches transcription, Bible detection, or the current reference.
+        Shared by the web control panel (POST /api/bible/style).
+        """
+        if style not in _VALID_BIBLE_STYLES or style == self._bible_style:
+            return
+        self._bible_style = style
+        self._push_state()
+
     def _broadcast_current_bible(self) -> None:
         """
         Push the currently selected Bible reference/text to the web output,
@@ -1127,7 +1148,7 @@ class MainWindow(QMainWindow):
                 "verse_chunks": [c.display() for c in chunks],
                 "current_chunk_index": self._current_chunk_index,
             },
-            "display": {"mode": self._display_mode},
+            "display": {"mode": self._display_mode, "bible_style": self._bible_style},
             "reference_history": [
                 {"key": r.normalized_key(), "display": r.display()} for r in history
             ],

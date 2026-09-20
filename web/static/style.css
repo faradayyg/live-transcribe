@@ -325,6 +325,67 @@ body.bible-only #bible-text::before {
 }
 
 /* ------------------------------------------------------------------ */
+/* Bible style: "classic"                                               */
+/*                                                                     */
+/* The plain transparent style used before the gold redesign, selected  */
+/* via the /control panel's Bible Style dropdown (canonical state:      */
+/* display.bible_style). Applies to both the default overlay's Bible    */
+/* view and the dedicated Bible-only (?bible=true) scene.               */
+/* ------------------------------------------------------------------ */
+
+body[data-bible-style="classic"] #bible-ref {
+  display: block;
+  align-self: auto;
+  color: #a8d4ff;
+  font-weight: bold;
+  font-size: 0.62em;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: var(--shadow);
+  -webkit-text-stroke: 0.4px rgba(0, 0, 0, 0.9);
+}
+body[data-bible-style="classic"] #bible-ref::before {
+  content: none;
+}
+
+body[data-bible-style="classic"] #bible-text {
+  color: #e0efff;
+  border-left: none;
+  padding-left: 0;
+  text-shadow: var(--shadow);
+  -webkit-text-stroke: 0.4px rgba(0, 0, 0, 0.8);
+}
+body[data-bible-style="classic"] #bible-text::before {
+  content: none;
+}
+
+body[data-bible-style="classic"] #view-bible.pop,
+body[data-bible-style="classic"] #bible-ref.pop {
+  animation: none;
+}
+
+body.bible-only[data-bible-style="classic"] #view-bible {
+  background: rgba(0, 0, 0, 0.72);
+  border-radius: 10px;
+  padding: 18px 28px;
+  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.6);
+}
+body.bible-only[data-bible-style="classic"] #view-bible::after {
+  content: none;
+}
+body.bible-only[data-bible-style="classic"] #bible-ref {
+  font-size: 0.7em;
+  letter-spacing: 0.06em;
+}
+body.bible-only[data-bible-style="classic"] #bible-text {
+  font-size: var(--font-size);
+}
+
+/* ------------------------------------------------------------------ */
 /* Connection dot                                                      */
 /* ------------------------------------------------------------------ */
 

@@ -24,6 +24,7 @@ const statusBadgeEl    = document.getElementById("status-badge");
 const pauseBtnEl        = document.getElementById("pause-btn");
 const modeSubsBtnEl     = document.getElementById("mode-subs-btn");
 const modeBibleBtnEl    = document.getElementById("mode-bible-btn");
+const bibleStyleSelectEl = document.getElementById("bible-style-select");
 const bibleVisibleBtnEl = document.getElementById("bible-visible-btn");
 const manualRefFormEl   = document.getElementById("manual-ref-form");
 const manualRefInputEl  = document.getElementById("manual-ref-input");
@@ -129,6 +130,9 @@ function renderDisplayMode(display) {
   const mode = (display && display.mode) || "subtitles_bible";
   modeSubsBtnEl.classList.toggle("active", mode === "subtitles_bible");
   modeBibleBtnEl.classList.toggle("active", mode === "bible_only");
+
+  const style = (display && display.bible_style) || "gold";
+  if (bibleStyleSelectEl.value !== style) bibleStyleSelectEl.value = style;
 }
 
 function renderBibleVisibility(bible) {
@@ -213,6 +217,8 @@ function togglePause() {
 
 function setDisplayMode(mode) { postJSON("/api/display-mode", { mode }); }
 
+function setBibleStyle(style) { postJSON("/api/bible/style", { style }); }
+
 function toggleBibleVisible() {
   const visible = !lastState || !lastState.bible || lastState.bible.visible !== false;
   postJSON("/api/bible/visibility", { visible: !visible });
@@ -249,6 +255,7 @@ function showError(message) {
 pauseBtnEl.addEventListener("click", togglePause);
 modeSubsBtnEl.addEventListener("click", () => setDisplayMode("subtitles_bible"));
 modeBibleBtnEl.addEventListener("click", () => setDisplayMode("bible_only"));
+bibleStyleSelectEl.addEventListener("change", () => setBibleStyle(bibleStyleSelectEl.value));
 bibleVisibleBtnEl.addEventListener("click", toggleBibleVisible);
 manualRefFormEl.addEventListener("submit", (ev) => {
   ev.preventDefault();

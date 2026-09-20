@@ -66,12 +66,15 @@ let interimText    = "";
 let bibleActive    = false;
 let bibleVisible   = true;
 let displayMode    = "subtitles_bible";
+let bibleStyle     = "gold";
 let socket         = null;
 let reconnectDelay = RECONNECT_BASE_MS;
 
 // -----------------------------------------------------------------------
 // Initialise layout
 // -----------------------------------------------------------------------
+
+document.body.dataset.bibleStyle = bibleStyle;
 
 if (isFullMode) {
   slotEl.classList.add("hidden");
@@ -188,7 +191,11 @@ function triggerBiblePop() {
  * it only ever reflects the server's most recent broadcast.
  */
 function applyState(msg) {
-  if (msg.display) displayMode  = msg.display.mode || displayMode;
+  if (msg.display) {
+    displayMode = msg.display.mode || displayMode;
+    bibleStyle  = msg.display.bible_style || bibleStyle;
+    document.body.dataset.bibleStyle = bibleStyle;
+  }
   if (msg.bible)   bibleVisible = msg.bible.visible !== false;
   render();
 }

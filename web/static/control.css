@@ -257,6 +257,35 @@ h2 {
   color: #fff;
 }
 
+/* ---- Bible style selector ---------------------------------------------- */
+
+.select-label {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 0.78em;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.style-select {
+  width: 100%;
+  padding: 7px 8px;
+  font-size: 0.9em;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+}
+.style-select:hover {
+  border-color: var(--accent-bright);
+}
+.style-select:focus {
+  outline: none;
+  border-color: var(--accent-bright);
+}
+
 /* ---- Scripture / reference history list ------------------------------ */
 
 .ref-list {
@@ -442,6 +471,12 @@ h2 {
     min-width: 84px;
     padding: 12px 10px;
     font-size: 0.95em;
+    border-radius: 10px;
+  }
+
+  .style-select {
+    padding: 14px 12px;
+    font-size: 1em;
     border-radius: 10px;
   }
 }

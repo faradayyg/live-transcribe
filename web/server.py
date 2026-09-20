@@ -17,6 +17,8 @@ POST /api/transcription/resume  → resume transcription
 POST /api/bible/select          → {"key": "<normalized_key>"} select a history entry
 POST /api/bible/visibility      → {"visible": true|false} show/hide Bible on output
 POST /api/display-mode          → {"mode": "subtitles_bible"|"bible_only"}
+POST /api/bible/style           → {"style": "gold"|"classic"} switch the output
+                                   page's Bible verse styling
 POST /api/bible/chunk           → {"index": 0} display one verse-pair chunk of a
                                    ranged reference (see bible.verse_chunks)
 POST /api/bible/manual          → {"text": "Romans 8:1-4"} parse and display a
@@ -35,7 +37,7 @@ On connect:
    "transcription": {"running": true, "paused": false},
    "bible": {"current_reference": "Romans 8:1-4",
              "current_reference_key": "romans:8:1:4", "visible": true},
-   "display": {"mode": "subtitles_bible"},
+   "display": {"mode": "subtitles_bible", "bible_style": "gold"},
    "reference_history": [{"key": "...", "display": "Romans 8:1-4"}, ...]}
 
 Live updates:
@@ -70,6 +72,7 @@ log = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _VALID_DISPLAY_MODES = ("subtitles_bible", "bible_only")
+_VALID_BIBLE_STYLES = ("gold", "classic")
 
 
 class WebOutputServer:
@@ -120,6 +123,7 @@ class WebOutputServer:
         self._select_reference_cb: Optional[Callable[[str], None]] = None
         self._set_bible_visible_cb: Optional[Callable[[bool], None]] = None
         self._set_display_mode_cb: Optional[Callable[[str], None]] = None
+        self._set_bible_style_cb: Optional[Callable[[str], None]] = None
         self._select_chunk_cb: Optional[Callable[[int], None]] = None
         self._manual_reference_cb: Optional[Callable[[str], None]] = None
 
@@ -151,6 +155,7 @@ class WebOutputServer:
         select_reference: Callable[[str], None],
         set_bible_visible: Callable[[bool], None],
         set_display_mode: Callable[[str], None],
+        set_bible_style: Callable[[str], None],
         select_chunk: Callable[[int], None],
         manual_reference: Callable[[str], None],
     ) -> None:
@@ -166,6 +171,7 @@ class WebOutputServer:
         self._select_reference_cb = select_reference
         self._set_bible_visible_cb = set_bible_visible
         self._set_display_mode_cb = set_display_mode
+        self._set_bible_style_cb = set_bible_style
         self._select_chunk_cb = select_chunk
         self._manual_reference_cb = manual_reference
 
@@ -261,6 +267,7 @@ class WebOutputServer:
         app.router.add_post("/api/bible/select",         self._handle_select_reference)
         app.router.add_post("/api/bible/visibility",     self._handle_bible_visibility)
         app.router.add_post("/api/display-mode",         self._handle_display_mode)
+        app.router.add_post("/api/bible/style",          self._handle_bible_style)
         app.router.add_post("/api/bible/chunk",          self._handle_select_chunk)
         app.router.add_post("/api/bible/manual",         self._handle_manual_reference)
         app.router.add_static("/static", _STATIC_DIR)
@@ -393,6 +400,24 @@ class WebOutputServer:
         if self._set_display_mode_cb is None:
             return web.json_response({"error": "Control unavailable."}, status=503)
         self._set_display_mode_cb(mode)
+        return web.json_response({"ok": True})
+
+    async def _handle_bible_style(self, request: web.Request) -> web.Response:
+        """
+        Switch the output page's Bible verse styling between "gold" (the
+        default gradient/badge look) and "classic" (the plain transparent
+        style used before it). Purely an appearance setting — never
+        touches the current reference, transcription, or Bible detection.
+        """
+        body = await self._read_json(request)
+        if body is None:
+            return web.json_response({"error": "Invalid JSON body."}, status=400)
+        style = body.get("style")
+        if style not in _VALID_BIBLE_STYLES:
+            return web.json_response({"error": "Invalid Bible style."}, status=400)
+        if self._set_bible_style_cb is None:
+            return web.json_response({"error": "Control unavailable."}, status=503)
+        self._set_bible_style_cb(style)
         return web.json_response({"ok": True})
 
     async def _handle_select_chunk(self, request: web.Request) -> web.Response:

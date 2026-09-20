@@ -47,6 +47,7 @@ class FakeApp:
         self.paused = False
         self.bible_visible = True
         self.display_mode = "subtitles_bible"
+        self.bible_style = "gold"
         self.current_ref = None  # (key, display) tuple or None
         self.history: list[tuple[str, str]] = []  # (key, display)
         self.verse_chunks: list[str] = []
@@ -58,6 +59,7 @@ class FakeApp:
             select_reference=self.select_reference,
             set_bible_visible=self.set_bible_visible,
             set_display_mode=self.set_display_mode,
+            set_bible_style=self.set_bible_style,
             select_chunk=self.select_chunk,
             manual_reference=self.manual_reference,
         )
@@ -137,6 +139,12 @@ class FakeApp:
         self.display_mode = mode
         self.push_state()
 
+    def set_bible_style(self, style: str) -> None:
+        if style not in ("gold", "classic"):
+            return
+        self.bible_style = style
+        self.push_state()
+
     def push_state(self) -> None:
         self.server.push_state(self.snapshot())
 
@@ -151,7 +159,7 @@ class FakeApp:
                 "verse_chunks": self.verse_chunks,
                 "current_chunk_index": self.current_chunk_index,
             },
-            "display": {"mode": self.display_mode},
+            "display": {"mode": self.display_mode, "bible_style": self.bible_style},
             "reference_history": [
                 {"key": k, "display": d} for k, d in self.history
             ],
@@ -348,6 +356,44 @@ class TestDisplayMode:
         status, body = _post(app.port, "/api/display-mode", {"mode": "nonsense"})
         assert status == 400
         assert app.display_mode == "subtitles_bible"  # unchanged
+
+
+# ---------------------------------------------------------------------------
+# 5a. Bible display style (gold vs. classic)
+# ---------------------------------------------------------------------------
+
+
+class TestBibleStyle:
+    def test_set_classic(self, app):
+        status, body = _post(app.port, "/api/bible/style", {"style": "classic"})
+        assert status == 200
+        assert body["ok"] is True
+        assert app.bible_style == "classic"
+
+    def test_set_gold(self, app):
+        app.set_bible_style("classic")
+        status, _ = _post(app.port, "/api/bible/style", {"style": "gold"})
+        assert status == 200
+        assert app.bible_style == "gold"
+
+    def test_invalid_style_rejected(self, app):
+        status, body = _post(app.port, "/api/bible/style", {"style": "nonsense"})
+        assert status == 400
+        assert "error" in body
+        assert app.bible_style == "gold"  # unchanged
+
+    def test_missing_style_rejected(self, app):
+        status, body = _post(app.port, "/api/bible/style", {})
+        assert status == 400
+        assert app.bible_style == "gold"
+
+    def test_style_change_broadcasts_state(self, app):
+        with _ws_connect(app.port) as ws:
+            _recv_json(ws)  # init
+            status, _ = _post(app.port, "/api/bible/style", {"style": "classic"})
+            assert status == 200
+            msg = _drain_to_state(ws)
+            assert msg["display"]["bible_style"] == "classic"
 
 
 # ---------------------------------------------------------------------------
