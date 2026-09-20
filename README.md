@@ -375,6 +375,16 @@ All modes use a 10:2 aspect ratio slot anchored to the bottom of the
 viewport. Text expands upward as needed. The Bible verse overlay takes
 full precedence over the subtitle in lower-third mode.
 
+**Scripture styling** is deliberately distinct from the subtitle so a
+detected verse visually announces itself rather than just swapping text:
+a warm gold reference badge (with a small ✦ mark), a large decorative
+quotation mark, a gold accent bar beside the verse text, and a brief
+"pop" entrance animation (scale + fade) that replays every time a new
+reference or verse-pair chunk is displayed. In Bible-only mode the verse
+sits in its own card with a soft gradient gold border and glow, still
+bottom-anchored like the rest of the overlay. Respects
+`prefers-reduced-motion` (the pop animation is skipped).
+
 The page auto-reconnects if the app is restarted. The current Scripture
 display updates whenever the operator selects a reference in the Scripture
 panel.

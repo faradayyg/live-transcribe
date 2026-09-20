@@ -155,12 +155,31 @@ function applyTranscript(msg) {
 function applyBible(msg) {
   if (!msg || !msg.reference) {
     bibleActive = false;
-  } else {
-    bibleRefEl.textContent  = msg.reference;
-    bibleTextEl.textContent = msg.text || "";
-    bibleActive = true;
+    render();
+    return;
   }
+  const isNewReference = bibleRefEl.textContent !== msg.reference
+    || bibleTextEl.textContent !== (msg.text || "");
+  bibleRefEl.textContent  = msg.reference;
+  bibleTextEl.textContent = msg.text || "";
+  bibleActive = true;
   render();
+  if (isNewReference) triggerBiblePop();
+}
+
+/**
+ * Restart the CSS "pop" entrance animation so each new reference/verse
+ * visibly announces itself instead of silently swapping text in place.
+ * Removing the class, forcing a reflow, then re-adding it is the
+ * standard trick to replay a CSS animation on an element that already
+ * has it applied.
+ */
+function triggerBiblePop() {
+  viewBibleEl.classList.remove("pop");
+  bibleRefEl.classList.remove("pop");
+  void viewBibleEl.offsetWidth;
+  viewBibleEl.classList.add("pop");
+  bibleRefEl.classList.add("pop");
 }
 
 /**

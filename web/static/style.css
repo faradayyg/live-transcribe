@@ -13,32 +13,37 @@
  */
 
 :root {
-  --font-family:      Georgia, "Times New Roman", serif;
-  --font-size:        34px;
-  --line-height:      1.5;
+  --font-family: Georgia, "Times New Roman", serif;
+  --font-size: 40px;
+  --line-height: 1.5;
 
-  --text-color:       #ffffff;
-  --interim-color:    #b0b0b0;
-  --bible-ref-color:  #a8d4ff;
-  --bible-text-color: #e0efff;
+  --text-color: #ffffff;
+  --interim-color: #b0b0b0;
 
-  --h-padding:        52px;
-  --v-padding:        20px;
+  /* Bible palette — warm gold/parchment, distinct from the plain white
+     subtitle text so a detected verse visually "pops" against it. */
+  --gold: #f0c04a;
+  --gold-bright: #ffd873;
+  --gold-dim: #caa14f;
+  --parchment: #fff3da;
+  --bible-card-bg-1: #241505;
+  --bible-card-bg-2: #140b02;
+
+  --h-padding: 52px;
+  --v-padding: 20px;
   /* Gradient fade-in height above the text block */
-  --scrim-lead:       80px;
+  --scrim-lead: 80px;
 
   --scrim: linear-gradient(
     to bottom,
-    transparent        0%,
-    rgba(0,0,0,0.55)  40%,
-    rgba(0,0,0,0.82) 100%
+    transparent 0%,
+    rgba(0, 0, 0, 0.55) 40%,
+    rgba(0, 0, 0, 0.82) 100%
   );
 
   --shadow:
-    0 0   2px rgba(0,0,0,1.0),
-    0 1px 3px rgba(0,0,0,1.0),
-    0 2px 8px rgba(0,0,0,0.90),
-    0 0  20px rgba(0,0,0,0.70);
+    0 0 2px rgba(0, 0, 0, 1), 0 1px 3px rgba(0, 0, 0, 1),
+    0 2px 8px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 0, 0, 0.7);
 
   --dot-size: 10px;
 }
@@ -47,13 +52,16 @@
 /* Base                                                                */
 /* ------------------------------------------------------------------ */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body {
+html,
+body {
   width: 100%;
   height: 100%;
   background: transparent;
@@ -115,12 +123,17 @@ html, body {
 
 /* ------------------------------------------------------------------ */
 /* Bible view                                                          */
+/*                                                                     */
+/* Deliberately distinct from the subtitle: a warm gold reference      */
+/* "badge", a large decorative quote mark, and a gold accent bar so    */
+/* the verse visually pops the instant it appears.                    */
 /* ------------------------------------------------------------------ */
 
 #view-bible {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
+  position: relative;
 }
 
 #view-bible.hidden,
@@ -129,19 +142,76 @@ html, body {
 }
 
 #bible-ref {
-  color: var(--bible-ref-color);
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 0.35em;
+  color: #2a1a00;
   font-weight: bold;
-  font-size: 0.62em;
-  letter-spacing: 0.05em;
-  text-shadow: var(--shadow);
-  -webkit-text-stroke: 0.4px rgba(0, 0, 0, 0.9);
+  font-size: 0.5em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold-dim));
+  padding: 0.45em 0.9em;
+  border-radius: 999px;
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+}
+
+#bible-ref::before {
+  content: "\2726"; /* ✦ */
+  font-size: 0.9em;
 }
 
 #bible-text {
-  color: var(--bible-text-color);
-  font-style: italic;
+  position: relative;
+  color: var(--parchment);
   text-shadow: var(--shadow);
   -webkit-text-stroke: 0.4px rgba(0, 0, 0, 0.8);
+  padding-left: 0.75em;
+  border-left: 3px solid var(--gold);
+}
+
+/* Large faded decorative quotation mark behind the verse text */
+#bible-text::before {
+  content: "\201C"; /* “ */
+  position: absolute;
+  top: -0.55em;
+  left: -0.15em;
+  font-size: 2.2em;
+  color: var(--gold);
+  opacity: 0.35;
+  font-family: Georgia, serif;
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+  pointer-events: none;
+}
+
+/* Pop-in: replayed by app.js (remove+reflow+add) whenever a new         */
+/* reference/verse is displayed, so each new passage visibly announces  */
+/* itself instead of silently swapping text.                            */
+@keyframes bible-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.94);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.015);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+#view-bible.pop {
+  animation: bible-pop 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+#bible-ref.pop {
+  animation: bible-pop 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* ------------------------------------------------------------------ */
@@ -158,9 +228,13 @@ html, body {
   scrollbar-width: none;
 }
 
-#full-container::-webkit-scrollbar { display: none; }
+#full-container::-webkit-scrollbar {
+  display: none;
+}
 
-#full-container.hidden { display: none; }
+#full-container.hidden {
+  display: none;
+}
 
 #transcript p {
   margin-bottom: 0.8em;
@@ -175,31 +249,79 @@ html, body {
 /* ------------------------------------------------------------------ */
 /* Bible-only mode (?bible=true)                                       */
 /*                                                                     */
-/* Centred in the viewport; dark pill behind the verse; slot has no   */
-/* gradient scrim (pill provides the contrast).                        */
+/* A self-contained, richly-styled card: gradient border glow, warm    */
+/* radial backdrop, and a centred composition -- designed to look      */
+/* deliberate on its own OBS scene rather than a plain text dump.      */
 /* ------------------------------------------------------------------ */
 
 body.bible-only #slot {
-  /* Keep bottom-anchored like the overlay; pill provides contrast instead of scrim */
+  /* Bottom-aligned per existing requirement — the card supplies its own
+     contrast via the gradient/glow below, so no scrim is needed. */
+  justify-content: flex-end;
+  align-items: center;
   padding: var(--h-padding);
   background: transparent;
 }
 
 body.bible-only #view-bible {
-  gap: 10px;
-  background: rgba(0, 0, 0, 0.72);
-  border-radius: 10px;
-  padding: 18px 28px;
-  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.60);
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+  max-width: 78vw;
+
+  position: relative;
+  background:
+    linear-gradient(160deg, var(--bible-card-bg-1), var(--bible-card-bg-2));
+  border-radius: 18px;
+  padding: 34px 52px;
+
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(240, 192, 74, 0.35) inset,
+    0 0 60px rgba(240, 192, 74, 0.12);
+}
+
+/* Gradient border ring, drawn as a padded pseudo-layer behind the card */
+body.bible-only #view-bible::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 20px;
+  padding: 2px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 216, 115, 0.9),
+    rgba(240, 192, 74, 0.15) 40%,
+    rgba(240, 192, 74, 0.15) 60%,
+    rgba(255, 216, 115, 0.9)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: -1;
 }
 
 body.bible-only #bible-ref {
-  font-size: 0.70em;
-  letter-spacing: 0.06em;
+  align-self: center;
+  font-size: 0.75em;
 }
 
 body.bible-only #bible-text {
   font-size: var(--font-size);
+  border-left: none;
+  padding-left: 0;
+}
+
+body.bible-only #bible-text::before {
+  /* Centred composition: float the flourish above rather than beside */
+  left: 50%;
+  top: -0.85em;
+  transform: translateX(-50%);
+  font-size: 1.8em;
+  opacity: 0.4;
 }
 
 /* ------------------------------------------------------------------ */
@@ -217,14 +339,25 @@ body.bible-only #bible-text {
   transition: background-color 0.4s ease;
 }
 
-#conn-dot.connected    { background: #27ae60; }
-#conn-dot.disconnected { background: #888888; }
-#conn-dot.reconnecting { background: #e6a817; }
+#conn-dot.connected {
+  background: #27ae60;
+}
+#conn-dot.disconnected {
+  background: #888888;
+}
+#conn-dot.reconnecting {
+  background: #e6a817;
+}
 
 /* ------------------------------------------------------------------ */
 /* Reduced-motion                                                      */
 /* ------------------------------------------------------------------ */
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; }
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
 }
