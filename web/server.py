@@ -17,8 +17,8 @@ POST /api/transcription/resume  → resume transcription
 POST /api/bible/select          → {"key": "<normalized_key>"} select a history entry
 POST /api/bible/visibility      → {"visible": true|false} show/hide Bible on output
 POST /api/display-mode          → {"mode": "subtitles_bible"|"bible_only"}
-POST /api/bible/style           → {"style": "gold"|"classic"} switch the output
-                                   page's Bible verse styling
+POST /api/bible/style           → {"style": <one of BIBLE_STYLES>} switch the
+                                   output page's Bible verse styling
 POST /api/bible/chunk           → {"index": 0} display one verse-pair chunk of a
                                    ranged reference (see bible.verse_chunks)
 POST /api/bible/manual          → {"text": "Romans 8:1-4"} parse and display a
@@ -36,7 +36,9 @@ On connect:
   {"type": "state",
    "transcription": {"running": true, "paused": false},
    "bible": {"current_reference": "Romans 8:1-4",
-             "current_reference_key": "romans:8:1:4", "visible": true},
+             "current_reference_key": "romans:8:1:4",
+             "current_display": "Romans 8:1-2", "current_text": "...",
+             "visible": true},
    "display": {"mode": "subtitles_bible", "bible_style": "gold"},
    "reference_history": [{"key": "...", "display": "Romans 8:1-4"}, ...]}
 
@@ -72,7 +74,7 @@ log = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _VALID_DISPLAY_MODES = ("subtitles_bible", "bible_only")
-_VALID_BIBLE_STYLES = ("gold", "classic")
+BIBLE_STYLES = ("gold", "classic", "royal", "modern", "parchment")
 
 
 class WebOutputServer:
@@ -404,16 +406,15 @@ class WebOutputServer:
 
     async def _handle_bible_style(self, request: web.Request) -> web.Response:
         """
-        Switch the output page's Bible verse styling between "gold" (the
-        default gradient/badge look) and "classic" (the plain transparent
-        style used before it). Purely an appearance setting — never
-        touches the current reference, transcription, or Bible detection.
+        Switch the output page's Bible verse styling to one of
+        BIBLE_STYLES. Purely an appearance setting — never touches the
+        current reference, transcription, or Bible detection.
         """
         body = await self._read_json(request)
         if body is None:
             return web.json_response({"error": "Invalid JSON body."}, status=400)
         style = body.get("style")
-        if style not in _VALID_BIBLE_STYLES:
+        if style not in BIBLE_STYLES:
             return web.json_response({"error": "Invalid Bible style."}, status=400)
         if self._set_bible_style_cb is None:
             return web.json_response({"error": "Control unavailable."}, status=503)

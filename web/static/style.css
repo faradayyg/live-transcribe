@@ -28,6 +28,8 @@
   --parchment: #fff3da;
   --bible-card-bg-1: #241505;
   --bible-card-bg-2: #140b02;
+  --badge-text: #2a1a00;
+  --bible-glow: 240, 192, 74; /* R, G, B of the accent, for rgba() */
 
   --h-padding: 52px;
   --v-padding: 20px;
@@ -94,6 +96,11 @@ body {
   background: var(--scrim);
 }
 
+/* Nothing to show: keep the source fully transparent on air. */
+#slot.empty {
+  background: none;
+}
+
 /* ------------------------------------------------------------------ */
 /* Subtitle view                                                       */
 /* ------------------------------------------------------------------ */
@@ -134,6 +141,8 @@ body {
   flex-direction: column;
   gap: 10px;
   position: relative;
+  /* --fit is set by app.js when a long passage must shrink to fit. */
+  font-size: calc(1em * var(--fit, 1));
 }
 
 #view-bible.hidden,
@@ -146,7 +155,7 @@ body {
   align-self: flex-start;
   align-items: center;
   gap: 0.35em;
-  color: #2a1a00;
+  color: var(--badge-text);
   font-weight: bold;
   font-size: 0.5em;
   letter-spacing: 0.08em;
@@ -171,6 +180,20 @@ body {
   -webkit-text-stroke: 0.4px rgba(0, 0, 0, 0.8);
   padding-left: 0.75em;
   border-left: 3px solid var(--gold);
+}
+
+.verse-num {
+  margin-right: 0.2em;
+  color: var(--gold);
+  font-size: 0.55em;
+  font-weight: bold;
+  vertical-align: 0.5em;
+  line-height: 0;
+  -webkit-text-stroke: 0;
+}
+
+body[data-bible-style="classic"] .verse-num {
+  color: #a8d4ff;
 }
 
 /* Large faded decorative quotation mark behind the verse text */
@@ -258,8 +281,8 @@ body.bible-only #slot {
   /* Bottom-aligned per existing requirement — the card supplies its own
      contrast via the gradient/glow below, so no scrim is needed. */
   justify-content: flex-end;
-  align-items: center;
-  padding: var(--h-padding);
+  align-items: stretch;
+  padding: var(--h-padding) 20px;
   background: transparent;
 }
 
@@ -267,7 +290,6 @@ body.bible-only #view-bible {
   align-items: center;
   text-align: center;
   gap: 16px;
-  max-width: 78vw;
 
   position: relative;
   background:
@@ -277,8 +299,8 @@ body.bible-only #view-bible {
 
   box-shadow:
     0 12px 48px rgba(0, 0, 0, 0.65),
-    0 0 0 1px rgba(240, 192, 74, 0.35) inset,
-    0 0 60px rgba(240, 192, 74, 0.12);
+    0 0 0 1px rgba(var(--bible-glow), 0.35) inset,
+    0 0 60px rgba(var(--bible-glow), 0.12);
 }
 
 /* Gradient border ring, drawn as a padded pseudo-layer behind the card */
@@ -290,10 +312,10 @@ body.bible-only #view-bible::after {
   padding: 2px;
   background: linear-gradient(
     135deg,
-    rgba(255, 216, 115, 0.9),
-    rgba(240, 192, 74, 0.15) 40%,
-    rgba(240, 192, 74, 0.15) 60%,
-    rgba(255, 216, 115, 0.9)
+    rgba(var(--bible-glow), 0.9),
+    rgba(var(--bible-glow), 0.15) 40%,
+    rgba(var(--bible-glow), 0.15) 60%,
+    rgba(var(--bible-glow), 0.9)
   );
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
@@ -310,18 +332,13 @@ body.bible-only #bible-ref {
 }
 
 body.bible-only #bible-text {
-  font-size: var(--font-size);
   border-left: none;
   padding-left: 0;
 }
 
+/* The centred reference badge already sits where the flourish would go. */
 body.bible-only #bible-text::before {
-  /* Centred composition: float the flourish above rather than beside */
-  left: 50%;
-  top: -0.85em;
-  transform: translateX(-50%);
-  font-size: 1.8em;
-  opacity: 0.4;
+  content: none;
 }
 
 /* ------------------------------------------------------------------ */
@@ -381,8 +398,73 @@ body.bible-only[data-bible-style="classic"] #bible-ref {
   font-size: 0.7em;
   letter-spacing: 0.06em;
 }
-body.bible-only[data-bible-style="classic"] #bible-text {
-  font-size: var(--font-size);
+/* ------------------------------------------------------------------ */
+/* Bible styles built on Gold's structure by swapping its colour tokens */
+/* ------------------------------------------------------------------ */
+
+body[data-bible-style="royal"] {
+  --gold: #b79cff;
+  --gold-bright: #d9ccff;
+  --gold-dim: #9277e8;
+  --parchment: #f1ecff;
+  --bible-card-bg-1: #241a52;
+  --bible-card-bg-2: #120c30;
+  --badge-text: #1b1040;
+  --bible-glow: 183, 156, 255;
+}
+
+/* "modern": sans-serif, flat badge, no quotation flourish. */
+body[data-bible-style="modern"] {
+  --gold: #37d6c4;
+  --gold-bright: #37d6c4;
+  --gold-dim: #37d6c4;
+  --parchment: #ffffff;
+  --bible-card-bg-1: #10151c;
+  --bible-card-bg-2: #0a0d12;
+  --badge-text: #04201d;
+  --bible-glow: 55, 214, 196;
+}
+body[data-bible-style="modern"] #view-bible {
+  font-family: "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+}
+body[data-bible-style="modern"] #bible-ref {
+  border-radius: 4px;
+}
+body[data-bible-style="modern"] #bible-ref::before {
+  content: none;
+}
+body[data-bible-style="modern"] #bible-text {
+  border-left-width: 5px;
+  -webkit-text-stroke: 0;
+}
+body[data-bible-style="modern"] #bible-text::before {
+  content: none;
+}
+body.bible-only[data-bible-style="modern"] #view-bible {
+  border-radius: 6px;
+}
+
+/* "parchment": the one light style, so the verse always sits on its own
+   card -- dark text would be unreadable straight on the dark scrim. */
+body[data-bible-style="parchment"] {
+  --gold: #8a5a1f;
+  --gold-bright: #a8742f;
+  --gold-dim: #7a4e19;
+  --parchment: #2b1d0e;
+  --bible-card-bg-1: #fbf3df;
+  --bible-card-bg-2: #efe0bf;
+  --badge-text: #fff6e3;
+  --bible-glow: 138, 90, 31;
+}
+body[data-bible-style="parchment"] #bible-text {
+  text-shadow: none;
+  -webkit-text-stroke: 0;
+}
+body:not(.bible-only)[data-bible-style="parchment"] #view-bible {
+  padding: 22px 30px;
+  border-radius: 14px;
+  background: linear-gradient(160deg, var(--bible-card-bg-1), var(--bible-card-bg-2));
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
 }
 
 /* ------------------------------------------------------------------ */
@@ -400,8 +482,9 @@ body.bible-only[data-bible-style="classic"] #bible-text {
   transition: background-color 0.4s ease;
 }
 
+/* Only a problem is worth showing on a live broadcast. */
 #conn-dot.connected {
-  background: #27ae60;
+  background: transparent;
 }
 #conn-dot.disconnected {
   background: #888888;

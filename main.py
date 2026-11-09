@@ -53,6 +53,8 @@ from ui.main_window import MainWindow
 
 
 def _apply_dark_palette(app: QApplication) -> None:
+    # Native macOS/Windows styles only partly honour a custom palette.
+    app.setStyle("Fusion")
     palette = QPalette()
     palette.setColor(QPalette.Window,          QColor(30, 30, 46))
     palette.setColor(QPalette.WindowText,      QColor(220, 220, 220))
@@ -66,7 +68,8 @@ def _apply_dark_palette(app: QApplication) -> None:
     palette.setColor(QPalette.BrightText,      QColor(255, 80, 80))
     palette.setColor(QPalette.Link,            QColor(42, 130, 218))
     palette.setColor(QPalette.Highlight,       QColor(42, 130, 218))
-    palette.setColor(QPalette.HighlightedText, QColor(0, 0, 0))
+    palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
+    palette.setColor(QPalette.PlaceholderText, QColor(122, 122, 140))
     app.setPalette(palette)
 
 

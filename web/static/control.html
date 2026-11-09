@@ -2,67 +2,80 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Live Transcriber — Control</title>
   <link rel="stylesheet" href="/static/control.css" />
 </head>
 <body>
 
+  <div id="conn-banner" class="conn-banner hidden" role="status"></div>
+
   <div id="app">
-    <header>
-      <h1>Live Transcriber</h1>
-      <div id="conn-dot" class="disconnected" title="Connection status"></div>
+    <header class="status-row">
+      <div id="status-badge" class="status-pill disconnected">
+        <span class="status-dot"></span>
+        <span id="status-label">Not running</span>
+      </div>
+      <button id="pause-btn" class="btn btn-go" disabled>Pause</button>
     </header>
 
-    <div class="status-row">
-      <div id="status-badge" class="status-symbol disconnected" title="Disconnected">●</div>
-      <button id="pause-btn" class="big-btn primary" disabled>PAUSE</button>
-    </div>
-
-    <section class="block">
-      <h2>Display</h2>
-      <div class="toggle-row">
-        <button id="mode-subs-btn"  class="toggle-btn active">Subtitles + Bible</button>
-        <button id="mode-bible-btn" class="toggle-btn">Bible only</button>
+    <section id="on-air" class="block on-air">
+      <div class="block-head">
+        <h2>Scripture on screen</h2>
+        <span id="on-air-tag" class="tag hidden"></span>
+        <button id="bible-visible-btn" class="btn btn-small">Hide</button>
       </div>
-      <label class="select-label" for="bible-style-select">Bible style</label>
-      <select id="bible-style-select" class="style-select">
-        <option value="gold">Gold</option>
-        <option value="classic">Classic (transparent)</option>
-      </select>
+      <p id="on-air-ref" class="on-air-ref"></p>
+      <p id="on-air-text" class="on-air-text"></p>
+
+      <div id="chunk-section" class="hidden">
+        <div class="stepper">
+          <button id="chunk-prev-btn" class="btn" title="Previous verses (Left arrow)">‹ Prev</button>
+          <span id="chunk-position" class="stepper-position"></span>
+          <button id="chunk-next-btn" class="btn" title="Next verses (Right arrow)">Next ›</button>
+        </div>
+        <ul id="chunk-list" class="chunk-list"></ul>
+      </div>
     </section>
 
     <section class="block">
-      <h2>Bible</h2>
-      <button id="bible-visible-btn" class="big-btn secondary">HIDE BIBLE</button>
+      <h2>Look up</h2>
       <form id="manual-ref-form" class="manual-ref-form">
         <input
           id="manual-ref-input"
           type="text"
-          placeholder="e.g. John 3:16 or Romans 8:1-4"
+          placeholder="John 3:16 or Romans 8:1-4"
+          aria-label="Bible reference"
           autocomplete="off"
           autocapitalize="words"
         />
-        <button type="submit" class="manual-ref-btn">Go</button>
+        <button type="submit" class="btn btn-accent">Show</button>
       </form>
       <p id="manual-ref-error" class="field-error hidden"></p>
     </section>
 
-    <section id="chunk-section" class="block hidden">
-      <h2>Verse pairs</h2>
-      <p class="hint">Tap a pair to display it as the reader reads:</p>
-      <ul id="chunk-list" class="chunk-list"></ul>
+    <section class="block">
+      <h2>This session</h2>
+      <ul id="ref-list" class="ref-list"></ul>
     </section>
 
     <section class="block">
-      <h2>Scripture</h2>
-      <ul id="ref-list" class="ref-list">
-        <li class="empty">No references yet</li>
-      </ul>
+      <h2>Output</h2>
+      <div class="toggle-row" role="group" aria-label="Display mode">
+        <button id="mode-subs-btn"  class="toggle-btn active">Subtitles + Bible</button>
+        <button id="mode-bible-btn" class="toggle-btn">Bible only</button>
+      </div>
+      <div class="toggle-row style-grid" role="group" aria-label="Bible style">
+        <button class="toggle-btn active" data-style="gold"><span class="style-swatch"></span>Gold</button>
+        <button class="toggle-btn" data-style="classic"><span class="style-swatch"></span>Classic</button>
+        <button class="toggle-btn" data-style="royal"><span class="style-swatch"></span>Royal</button>
+        <button class="toggle-btn" data-style="modern"><span class="style-swatch"></span>Modern</button>
+        <button class="toggle-btn" data-style="parchment"><span class="style-swatch"></span>Parchment</button>
+      </div>
     </section>
   </div>
 
-  <div id="error-toast" class="hidden"></div>
+  <div id="error-toast" class="hidden" role="alert"></div>
 
   <script src="/static/control.js"></script>
 </body>

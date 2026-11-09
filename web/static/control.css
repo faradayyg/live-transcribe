@@ -10,14 +10,18 @@
 :root {
   --bg: #12121c;
   --panel: #1a1a2e;
+  --control: #2b2b40;
   --border: #333348;
   --text: #f0f0f5;
-  --muted: #9090a0;
+  --muted: #a4a4b6;
   --accent: #2c5f8a;
   --accent-bright: #4090cf;
+  --gold: #f0c04a;
   --green: #27ae60;
+  --green-text: #4cd787;
   --amber: #e6a817;
   --red: #c0392b;
+  --red-text: #ff8a80;
 }
 
 * {
@@ -43,19 +47,11 @@ body {
   max-width: 480px;
   margin: 0 auto;
   padding: 10px 12px 20px;
+  transition: opacity 0.15s ease;
 }
 
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 2px 0 4px;
-}
-
-h1 {
-  font-size: 1.15em;
-  margin: 0;
-  font-weight: 700;
+body.offline #app {
+  opacity: 0.55;
 }
 
 h2 {
@@ -66,162 +62,124 @@ h2 {
   margin: 0 0 6px;
 }
 
-#conn-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #666;
-  flex-shrink: 0;
-}
-#conn-dot.connected {
-  background: var(--green);
-}
-#conn-dot.reconnecting {
-  background: var(--amber);
-}
-#conn-dot.disconnected {
-  background: var(--red);
+button {
+  font-family: inherit;
 }
 
-/* ---- Status symbol + Pause button, side by side ----------------------- */
+:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 1px;
+}
+
+/* ---- Connection banner ------------------------------------------------ */
+
+.conn-banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  padding: 6px 12px;
+  background: var(--amber);
+  color: #201800;
+  font-size: 0.9em;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* ---- Status + Pause --------------------------------------------------- */
 
 .status-row {
   display: flex;
   align-items: stretch;
   gap: 8px;
-  margin: 2px 0 12px;
+  margin: 0 0 10px;
 }
 
-.status-symbol {
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+.status-pill {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 1.05em;
-  font-weight: 700;
+  gap: 7px;
+  padding: 0 10px;
+  min-height: 34px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-}
-.status-symbol.live {
-  color: var(--green);
-}
-.status-symbol.paused {
-  color: var(--accent-bright);
-}
-.status-symbol.error {
-  color: var(--red);
-}
-.status-symbol.disconnected {
-  color: var(--muted);
-}
-.status-symbol.connecting {
-  color: var(--amber);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.status-row .big-btn {
-  flex: 1;
-  height: 34px;
-  margin: 0;
-  padding: 0 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.status-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-pill.live { color: var(--green-text); }
+.status-pill.paused { color: var(--amber); }
+.status-pill.connecting { color: var(--amber); }
+.status-pill.error { color: var(--red-text); }
+.status-pill.disconnected { color: var(--muted); }
+
+.status-pill.live .status-dot {
+  animation: status-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes status-pulse {
+  50% { opacity: 0.35; }
+}
+
+.status-row .btn {
+  flex: 1 1 0;
 }
 
 /* ---- Buttons ----------------------------------------------------------- */
 
-.big-btn {
-  display: block;
-  width: 100%;
-  padding: 8px 12px;
-  margin: 6px 0 12px;
-  font-size: 0.95em;
+.btn {
+  padding: 7px 12px;
+  font-size: 0.92em;
   font-weight: 700;
-  letter-spacing: 0.02em;
   border: none;
-  border-radius: 8px;
-  color: #fff;
-  background: var(--accent);
+  border-radius: 7px;
+  color: var(--text);
+  background: var(--control);
   cursor: pointer;
-  transition:
-    transform 0.05s ease,
-    opacity 0.15s ease,
-    background 0.1s ease;
 }
-.big-btn:hover:not(:disabled) {
-  filter: brightness(1.12);
+.btn:hover:not(:disabled) {
+  filter: brightness(1.18);
 }
-.big-btn:active {
+.btn:active:not(:disabled) {
   transform: scale(0.98);
 }
-.big-btn:disabled {
+.btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.big-btn.primary {
+.btn-go {
   background: var(--green);
-  padding: 6px 10px;
-  font-size: 0.9em;
+  color: #fff;
 }
-.big-btn.primary.paused {
+.btn-go.paused {
   background: var(--amber);
   color: #201800;
 }
-.big-btn.secondary {
-  background: #33334a;
-}
-.big-btn.secondary.hidden-state {
-  background: var(--red);
-}
-
-/* ---- Manual reference entry ------------------------------------------ */
-
-.manual-ref-form {
-  display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.manual-ref-form input {
-  flex: 1;
-  min-width: 0;
-  padding: 7px 8px;
-  font-size: 0.9em;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg);
-  color: var(--text);
-}
-.manual-ref-form input:focus {
-  outline: none;
-  border-color: var(--accent-bright);
-}
-
-.manual-ref-btn {
-  padding: 7px 14px;
-  font-size: 0.9em;
-  font-weight: 700;
-  border: none;
-  border-radius: 7px;
+.btn-accent {
   background: var(--accent);
   color: #fff;
-  cursor: pointer;
 }
-.manual-ref-btn:hover {
-  filter: brightness(1.12);
+.btn-small {
+  padding: 3px 10px;
+  font-size: 0.85em;
 }
-.manual-ref-btn:active {
-  transform: scale(0.97);
+.btn-small.needs-attention {
+  background: var(--amber);
+  color: #201800;
 }
 
-.field-error {
-  margin: 6px 0 0;
-  color: #ff8a80;
-  font-size: 0.8em;
-}
+/* ---- Blocks ----------------------------------------------------------- */
 
 .block {
   background: var(--panel);
@@ -231,150 +189,229 @@ h2 {
   margin-bottom: 10px;
 }
 
-.toggle-row {
+.block-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.block-head h2 {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: rgba(39, 174, 96, 0.2);
+  color: var(--green-text);
+}
+.tag.off {
+  background: rgba(230, 168, 23, 0.2);
+  color: var(--amber);
+}
+
+/* ---- Scripture on screen ---------------------------------------------- */
+
+.on-air-ref {
+  margin: 0;
+  color: var(--gold);
+  font-size: 1.15em;
+  font-weight: 700;
+}
+.on-air-ref.none {
+  color: var(--muted);
+  font-size: 1em;
+  font-weight: 400;
+}
+
+.on-air-text {
+  margin: 4px 0 0;
+  max-height: 8.5em;
+  overflow-y: auto;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.95em;
+  line-height: 1.4;
+  white-space: pre-line;
+}
+.on-air-text:empty {
+  display: none;
+}
+
+.on-air.is-hidden .on-air-ref,
+.on-air.is-hidden .on-air-text {
+  opacity: 0.5;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.stepper .btn {
+  flex: 1 1 0;
+}
+.stepper-position {
+  flex: 0 0 auto;
+  min-width: 52px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrolls internally so a long chapter (Psalm 119 has 88 pairs) never
+   pushes the sections below it out of the dock. */
+.chunk-list {
+  position: relative;
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 4px;
+  max-height: 94px;
+  overflow-y: auto;
+}
+
+.chunk-btn {
+  width: 100%;
+  padding: 4px 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--control);
+  color: var(--text);
+  font-size: 0.85em;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.chunk-btn:hover {
+  border-color: var(--accent-bright);
+}
+.chunk-btn.current {
+  background: var(--accent);
+  border-color: var(--accent-bright);
+  color: #fff;
+}
+
+/* ---- Manual reference entry ------------------------------------------ */
+
+.manual-ref-form {
   display: flex;
   gap: 6px;
 }
 
-.toggle-btn {
+.manual-ref-form input {
   flex: 1;
-  padding: 7px 6px;
-  font-size: 0.85em;
-  font-weight: 600;
+  min-width: 0;
+  padding: 7px 8px;
+  font-size: 0.92em;
   border: 1px solid var(--border);
   border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+}
+.manual-ref-form input::placeholder {
+  color: #7f7f92;
+}
+
+.field-error {
+  margin: 6px 0 0;
+  color: var(--red-text);
+  font-size: 0.85em;
+}
+
+/* ---- Output toggles --------------------------------------------------- */
+
+.toggle-row {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+.toggle-row + .toggle-row {
+  margin-top: 6px;
+}
+
+.toggle-btn {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 0.88em;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
 }
 .toggle-btn:hover:not(.active) {
-  border-color: var(--accent-bright);
   color: var(--text);
 }
 .toggle-btn.active {
   background: var(--accent);
-  border-color: var(--accent-bright);
   color: #fff;
 }
 
-/* ---- Bible style selector ---------------------------------------------- */
-
-.select-label {
-  display: block;
-  margin: 10px 0 4px;
-  font-size: 0.78em;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+.style-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
 }
 
-.style-select {
-  width: 100%;
-  padding: 7px 8px;
-  font-size: 0.9em;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg);
-  color: var(--text);
-  cursor: pointer;
+.style-swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 50%;
 }
-.style-select:hover {
-  border-color: var(--accent-bright);
-}
-.style-select:focus {
-  outline: none;
-  border-color: var(--accent-bright);
-}
+[data-style="gold"] .style-swatch { background: #f0c04a; }
+[data-style="classic"] .style-swatch { background: #a8d4ff; }
+[data-style="royal"] .style-swatch { background: #b79cff; }
+[data-style="modern"] .style-swatch { background: #37d6c4; }
+[data-style="parchment"] .style-swatch { background: #efe0bf; }
 
-/* ---- Scripture / reference history list ------------------------------ */
+/* ---- Session reference list ------------------------------------------- */
 
 .ref-list {
   list-style: none;
-  margin: 0;
+  margin: 0 -4px;
   padding: 0;
-  max-height: 40vh;
+  max-height: 30vh;
   overflow-y: auto;
 }
 
-.ref-list li {
-  padding: 7px 8px;
-  border-bottom: 1px solid var(--border);
+.ref-btn {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
   font-size: 0.95em;
+  text-align: left;
   cursor: pointer;
-  user-select: none;
 }
-.ref-list li:last-child {
-  border-bottom: none;
+.ref-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
 }
-.ref-list li:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-.ref-list li:active {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.ref-list li.current {
-  color: #fff;
+.ref-btn.current {
+  background: rgba(64, 144, 207, 0.2);
   font-weight: 700;
 }
-.ref-list li.current::before {
-  content: "▶ ";
-  color: var(--accent-bright);
-}
 
-.ref-list li.empty {
+.ref-list .empty {
+  padding: 4px 8px;
   color: var(--muted);
-  cursor: default;
-  text-align: center;
-  font-style: italic;
-}
-.ref-list li.empty:hover {
-  background: transparent;
-}
-
-/* ---- Verse-pair navigator --------------------------------------------- */
-
-.hint {
-  margin: 0 0 8px;
-  color: var(--muted);
-  font-size: 0.8em;
-}
-
-.chunk-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.chunk-list li {
-  flex: 1 1 auto;
-  min-width: 72px;
-  text-align: center;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: #33334a;
-  color: var(--muted);
-  font-size: 0.85em;
-  font-weight: 600;
-  cursor: pointer;
-  user-select: none;
-}
-.chunk-list li:hover {
-  border-color: var(--accent-bright);
-  color: var(--text);
-}
-.chunk-list li:active {
-  transform: scale(0.97);
-}
-
-.chunk-list li.current {
-  background: var(--accent);
-  border-color: var(--accent-bright);
-  color: #fff;
 }
 
 /* ---- Error toast ------------------------------------------------------ */
@@ -399,6 +436,12 @@ h2 {
   display: none !important;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .status-pill.live .status-dot {
+    animation: none;
+  }
+}
+
 /* ------------------------------------------------------------------- */
 /* Touch devices (phone/tablet): restore larger tap targets. The dock-  */
 /* first defaults above are compact for mouse/keyboard use when         */
@@ -417,66 +460,49 @@ h2 {
     padding: 16px 16px 48px;
   }
 
-  .status-row {
-    gap: 10px;
-    margin: 4px 0 16px;
-  }
-
-  .status-symbol,
-  .status-row .big-btn {
-    height: 48px;
-  }
-  .status-symbol {
-    width: 48px;
-    font-size: 1.2em;
+  .status-pill,
+  .status-row .btn {
+    min-height: 48px;
     border-radius: 12px;
   }
 
-  .big-btn {
-    padding: 18px;
-    margin: 8px 0 18px;
-    font-size: 1.1em;
-    border-radius: 12px;
-  }
-  .big-btn.primary {
-    padding: 12px;
-    font-size: 1em;
-  }
-
-  .manual-ref-form input,
-  .manual-ref-btn {
-    padding: 14px 16px;
-    font-size: 1em;
+  .btn {
+    padding: 12px 14px;
     border-radius: 10px;
+  }
+  .btn-small {
+    padding: 8px 14px;
   }
 
   .block {
     padding: 14px;
-    margin-bottom: 16px;
+    margin-bottom: 14px;
     border-radius: 12px;
   }
 
+  /* 16px keeps iOS from zooming the page when the field takes focus. */
+  .manual-ref-form input {
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 10px;
+  }
+
   .toggle-btn {
-    padding: 14px 6px;
+    padding: 12px 6px;
     font-size: 0.95em;
-    border-radius: 10px;
   }
 
-  .ref-list li {
-    padding: 14px 12px;
-    font-size: 1.05em;
+  .ref-btn {
+    padding: 12px;
   }
 
-  .chunk-list li {
-    min-width: 84px;
-    padding: 12px 10px;
+  .chunk-list {
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 6px;
+    max-height: 160px;
+  }
+  .chunk-btn {
+    padding: 11px 4px;
     font-size: 0.95em;
-    border-radius: 10px;
-  }
-
-  .style-select {
-    padding: 14px 12px;
-    font-size: 1em;
-    border-radius: 10px;
   }
 }

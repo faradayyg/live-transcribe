@@ -227,7 +227,7 @@ Stop the session before switching providers.
 
 1. Select your **Transcription engine**.
 2. Type a **Session name** (used for the saved file names).
-3. Click **▶ Start**.
+3. Click **Start**.
 4. The status badge changes: *Connecting → Live*.
 5. Speak — transcript appears in real time.
    - **Grey italic** text = current unfinished interim segment.
@@ -235,16 +235,16 @@ Stop the session before switching providers.
 
 ### Pausing and resuming
 
-Click **⏸ Pause** to mute the microphone temporarily.
-Click **▶ Resume** to continue.
+Click **Pause** to mute the microphone temporarily.
+Click **Resume** to continue.
 
 ### Stopping a session
 
-Click **⏹ Stop**. This disconnects from the provider and stops audio capture.
+Click **Stop**. This disconnects from the provider and stops audio capture.
 
 ### Saving the transcript
 
-After stopping, click **💾 Save Transcript** and choose a folder.
+After stopping, click **Save Transcript** and choose a folder.
 Two files are written:
 
 ```
@@ -377,7 +377,7 @@ full precedence over the subtitle in lower-third mode.
 
 **Scripture styling** is deliberately distinct from the subtitle so a
 detected verse visually announces itself rather than just swapping text.
-Two styles are available, switchable live from the **Bible style** dropdown
+Five styles are available, switchable live from the **Bible style** buttons
 on the [control panel](#web-control-panel) (canonical state:
 `display.bible_style`, applied instantly to every connected output page —
 no page refresh needed):
@@ -390,8 +390,13 @@ no page refresh needed):
 - **Classic** — the plain, transparent style used before the gold redesign
   (soft blue reference text, no badge/card chrome, no animation) for anyone
   who prefers a minimal look.
+- **Royal** — Gold's badge, card and animation in deep indigo and lavender.
+- **Modern** — clean sans-serif text with a flat teal badge and accent bar,
+  and no quotation mark.
+- **Parchment** — dark serif text on a light cream card, in both the
+  lower-third and Bible-only layouts.
 
-Both styles remain bottom-anchored, per the rest of the overlay, and respect
+All styles remain bottom-anchored, per the rest of the overlay, and respect
 `prefers-reduced-motion` (the pop animation is skipped either way).
 
 The page auto-reconnects if the app is restarted. The current Scripture
@@ -411,8 +416,8 @@ http://localhost:8765/control
 (use the computer's LAN IP instead of `localhost` to control the app from a
 phone or tablet on the same network — e.g. `http://192.168.1.23:8765/control`,
 or to embed it as a custom browser dock in OBS running on the same or a
-different machine). The URL is also shown, with a copy button and an "Open
-Control Panel" button, in the **Web Output** panel of the main window.
+different machine). It is also listed, with **Copy** and **Open** buttons, as "Control panel"
+in the **Web Output** panel of the main window.
 
 **Designed to be embedded as an OBS "Custom Browser Dock"** (`View →
 Docks → Custom Browser Docks…`, using the `/control` URL above), sitting
@@ -440,9 +445,9 @@ PySide6 window:
   on the output page. This only changes what is rendered; it never pauses
   transcription, disables Bible detection, or affects `?bible=true`, which
   remains a hard per-browser override for a dedicated OBS scene.
-- **Bible style** — a dropdown to switch the output page's verse styling
-  between **Gold** (the default badge/card look) and **Classic** (the
-  plain transparent style used before it). Purely an appearance setting;
+- **Bible style** — buttons to switch the output page's verse styling
+  between **Gold** (the default), **Classic**, **Royal**, **Modern** and
+  **Parchment**. Purely an appearance setting;
   never touches the current reference, transcription, or Bible detection.
   See [Web output](#web-output) for what each style looks like.
 - **Verse-pair navigator** — when the current reference spans more than two

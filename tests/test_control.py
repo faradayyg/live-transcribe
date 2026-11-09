@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import pytest
 import websockets.sync.client as ws_sync
 
-from web.server import WebOutputServer
+from web.server import BIBLE_STYLES, WebOutputServer
 
 
 TEST_PORT = 18800
@@ -140,7 +140,7 @@ class FakeApp:
         self.push_state()
 
     def set_bible_style(self, style: str) -> None:
-        if style not in ("gold", "classic"):
+        if style not in BIBLE_STYLES:
             return
         self.bible_style = style
         self.push_state()
@@ -364,6 +364,12 @@ class TestDisplayMode:
 
 
 class TestBibleStyle:
+    def test_every_style_accepted(self, app):
+        for style in BIBLE_STYLES:
+            status, _ = _post(app.port, "/api/bible/style", {"style": style})
+            assert status == 200
+            assert app.bible_style == style
+
     def test_set_classic(self, app):
         status, body = _post(app.port, "/api/bible/style", {"style": "classic"})
         assert status == 200

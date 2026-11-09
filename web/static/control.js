@@ -19,19 +19,27 @@ const RECONNECT_MAX_MS  = 30_000;
 // DOM references
 // -----------------------------------------------------------------------
 
-const connDotEl        = document.getElementById("conn-dot");
-const statusBadgeEl    = document.getElementById("status-badge");
+const connBannerEl      = document.getElementById("conn-banner");
+const statusBadgeEl     = document.getElementById("status-badge");
+const statusLabelEl     = document.getElementById("status-label");
 const pauseBtnEl        = document.getElementById("pause-btn");
-const modeSubsBtnEl     = document.getElementById("mode-subs-btn");
-const modeBibleBtnEl    = document.getElementById("mode-bible-btn");
-const bibleStyleSelectEl = document.getElementById("bible-style-select");
+const onAirEl           = document.getElementById("on-air");
+const onAirTagEl        = document.getElementById("on-air-tag");
+const onAirRefEl        = document.getElementById("on-air-ref");
+const onAirTextEl       = document.getElementById("on-air-text");
 const bibleVisibleBtnEl = document.getElementById("bible-visible-btn");
+const chunkSectionEl    = document.getElementById("chunk-section");
+const chunkPrevBtnEl    = document.getElementById("chunk-prev-btn");
+const chunkNextBtnEl    = document.getElementById("chunk-next-btn");
+const chunkPositionEl   = document.getElementById("chunk-position");
+const chunkListEl       = document.getElementById("chunk-list");
 const manualRefFormEl   = document.getElementById("manual-ref-form");
 const manualRefInputEl  = document.getElementById("manual-ref-input");
 const manualRefErrorEl  = document.getElementById("manual-ref-error");
-const chunkSectionEl    = document.getElementById("chunk-section");
-const chunkListEl       = document.getElementById("chunk-list");
 const refListEl         = document.getElementById("ref-list");
+const modeSubsBtnEl     = document.getElementById("mode-subs-btn");
+const modeBibleBtnEl    = document.getElementById("mode-bible-btn");
+const styleBtnEls       = document.querySelectorAll("[data-style]");
 const errorToastEl      = document.getElementById("error-toast");
 
 // -----------------------------------------------------------------------
@@ -41,6 +49,7 @@ const errorToastEl      = document.getElementById("error-toast");
 // -----------------------------------------------------------------------
 
 let lastState  = null;
+let engineStatus = null;   // from "init"/"status" messages; shown only while running
 let socket     = null;
 let reconnectDelay = RECONNECT_BASE_MS;
 let toastTimer = null;
@@ -51,24 +60,27 @@ let toastTimer = null;
 
 function connect() {
   const url = `ws://${window.location.host}${WS_PATH}`;
-  setDot("reconnecting");
+  setConnection("reconnecting");
   socket = new WebSocket(url);
 
   socket.addEventListener("open", () => {
     reconnectDelay = RECONNECT_BASE_MS;
-    setDot("connected");
+    setConnection("connected");
   });
 
   socket.addEventListener("message", (ev) => {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
     if (msg.type === "state") applyState(msg);
-    // "init"/"transcript"/"bible_reference" are irrelevant to the control
-    // panel — it only ever reflects canonical control state.
+    else if (msg.type === "init" || msg.type === "status") {
+      engineStatus = msg.status;
+      render();
+    }
+    // "transcript"/"bible_reference" are irrelevant to the control panel.
   });
 
   socket.addEventListener("close", () => {
-    setDot("disconnected");
+    setConnection("disconnected");
     socket = null;
     // Do NOT reset controls to defaults — keep showing the last known
     // state until a fresh one arrives after reconnecting.
@@ -81,7 +93,13 @@ function connect() {
   socket.addEventListener("error", () => { socket && socket.close(); });
 }
 
-function setDot(state) { connDotEl.className = state; }
+function setConnection(state) {
+  document.body.classList.toggle("offline", state !== "connected");
+  connBannerEl.classList.toggle("hidden", state === "connected");
+  connBannerEl.textContent = state === "connected"
+    ? ""
+    : "Lost connection to the app. Reconnecting…";
+}
 
 // -----------------------------------------------------------------------
 // Render from canonical state
@@ -95,8 +113,8 @@ function applyState(state) {
 function render() {
   if (!lastState) return;
   renderTranscription(lastState.transcription);
-  renderDisplayMode(lastState.display);
-  renderBibleVisibility(lastState.bible);
+  renderDisplay(lastState.display);
+  renderOnAir(lastState.bible);
   renderChunks(lastState.bible);
   renderReferenceHistory(lastState.reference_history, lastState.bible);
 }
@@ -107,58 +125,94 @@ function renderTranscription(t) {
 
   pauseBtnEl.disabled = !running;
   pauseBtnEl.classList.toggle("paused", paused);
+  pauseBtnEl.textContent = paused ? "Resume" : "Pause";
 
-  if (!running) {
-    pauseBtnEl.textContent = "PAUSE";
-    setStatusSymbol("●", "disconnected", "Disconnected");
-  } else if (paused) {
-    pauseBtnEl.textContent = "START";
-    setStatusSymbol("⏸", "paused", "Paused");
-  } else {
-    pauseBtnEl.textContent = "PAUSE";
-    setStatusSymbol("●", "live", "Live");
-  }
+  if (!running) setStatus("disconnected", "Not running");
+  else if (paused) setStatus("paused", "Paused");
+  else if (engineStatus === "error") setStatus("error", "Error");
+  else if (engineStatus === "connecting") setStatus("connecting", "Connecting");
+  else if (engineStatus === "disconnected") setStatus("error", "Engine offline");
+  else setStatus("live", "Live");
 }
 
-function setStatusSymbol(symbol, state, label) {
-  statusBadgeEl.textContent = symbol;
-  statusBadgeEl.className = `status-symbol ${state}`;
-  statusBadgeEl.title = label;
+function setStatus(state, label) {
+  statusBadgeEl.className = `status-pill ${state}`;
+  statusLabelEl.textContent = label;
 }
 
-function renderDisplayMode(display) {
+function renderDisplay(display) {
   const mode = (display && display.mode) || "subtitles_bible";
-  modeSubsBtnEl.classList.toggle("active", mode === "subtitles_bible");
-  modeBibleBtnEl.classList.toggle("active", mode === "bible_only");
+  setToggle(modeSubsBtnEl, mode === "subtitles_bible");
+  setToggle(modeBibleBtnEl, mode === "bible_only");
 
   const style = (display && display.bible_style) || "gold";
-  if (bibleStyleSelectEl.value !== style) bibleStyleSelectEl.value = style;
+  styleBtnEls.forEach((button) => setToggle(button, button.dataset.style === style));
 }
 
-function renderBibleVisibility(bible) {
+function setToggle(button, active) {
+  button.classList.toggle("active", active);
+  button.setAttribute("aria-pressed", String(active));
+}
+
+function renderOnAir(bible) {
   const visible = !bible || bible.visible !== false;
-  bibleVisibleBtnEl.textContent = visible ? "HIDE BIBLE" : "SHOW BIBLE";
-  bibleVisibleBtnEl.classList.toggle("hidden-state", !visible);
+  const label   = bible ? (bible.current_display || bible.current_reference) : null;
+
+  onAirEl.classList.toggle("is-hidden", !visible);
+  onAirRefEl.classList.toggle("none", !label);
+  onAirRefEl.textContent  = label || "Nothing selected";
+  onAirTextEl.textContent = (bible && bible.current_text) || "";
+
+  onAirTagEl.classList.toggle("hidden", visible && !label);
+  onAirTagEl.classList.toggle("off", !visible);
+  onAirTagEl.textContent = visible ? "Showing" : "Hidden";
+
+  bibleVisibleBtnEl.textContent = visible ? "Hide" : "Show";
+  bibleVisibleBtnEl.classList.toggle("needs-attention", !visible);
+}
+
+/** "Romans 8:1-2" -> "1-2"; the book and chapter are already shown above. */
+function verseRangeOf(display) {
+  return display.slice(display.lastIndexOf(":") + 1);
 }
 
 function renderChunks(bible) {
   const chunks = (bible && bible.verse_chunks) || [];
-  chunkListEl.innerHTML = "";
+  chunkSectionEl.classList.toggle("hidden", chunks.length === 0);
 
-  if (chunks.length === 0) {
-    chunkSectionEl.classList.add("hidden");
-    return;
+  // Rebuild only when the set of pairs changes, so stepping through a
+  // passage keeps keyboard focus and the list's scroll position.
+  const signature = chunks.join("\n");
+  if (chunkListEl.dataset.signature !== signature) {
+    chunkListEl.dataset.signature = signature;
+    chunkListEl.innerHTML = "";
+    chunks.forEach((display, index) => {
+      const li = document.createElement("li");
+      const button = document.createElement("button");
+      button.className = "chunk-btn";
+      button.textContent = verseRangeOf(display);
+      button.title = display;
+      button.addEventListener("click", () => selectChunk(index));
+      li.appendChild(button);
+      chunkListEl.appendChild(li);
+    });
   }
-  chunkSectionEl.classList.remove("hidden");
+  if (chunks.length === 0) return;
 
-  const currentIndex = bible ? bible.current_chunk_index : null;
-  chunks.forEach((display, index) => {
-    const li = document.createElement("li");
-    li.textContent = display;
-    if (index === currentIndex) li.classList.add("current");
-    li.addEventListener("click", () => selectChunk(index));
-    chunkListEl.appendChild(li);
+  const currentIndex = bible.current_chunk_index;
+  Array.from(chunkListEl.children).forEach((li, index) => {
+    li.firstChild.classList.toggle("current", index === currentIndex);
   });
+
+  chunkPositionEl.textContent = `${(currentIndex ?? 0) + 1} of ${chunks.length}`;
+  chunkPrevBtnEl.disabled = !currentIndex;
+  chunkNextBtnEl.disabled = currentIndex === chunks.length - 1;
+
+  const currentLi = chunkListEl.children[currentIndex];
+  if (currentLi) {
+    chunkListEl.scrollTop = currentLi.offsetTop
+      - (chunkListEl.clientHeight - currentLi.offsetHeight) / 2;
+  }
 }
 
 function renderReferenceHistory(history, bible) {
@@ -175,9 +229,12 @@ function renderReferenceHistory(history, bible) {
 
   for (const entry of history) {
     const li = document.createElement("li");
-    li.textContent = entry.display;
-    if (entry.key === currentKey) li.classList.add("current");
-    li.addEventListener("click", () => selectReference(entry.key));
+    const button = document.createElement("button");
+    button.className = "ref-btn";
+    button.textContent = entry.display;
+    if (entry.key === currentKey) button.classList.add("current");
+    button.addEventListener("click", () => selectReference(entry.key));
+    li.appendChild(button);
     refListEl.appendChild(li);
   }
 }
@@ -228,6 +285,14 @@ function selectReference(key) { postJSON("/api/bible/select", { key }); }
 
 function selectChunk(index) { postJSON("/api/bible/chunk", { index }); }
 
+function stepChunk(delta) {
+  const bible  = lastState && lastState.bible;
+  const chunks = (bible && bible.verse_chunks) || [];
+  if (chunks.length === 0) return;
+  const target = (bible.current_chunk_index ?? 0) + delta;
+  if (target >= 0 && target < chunks.length) selectChunk(target);
+}
+
 async function submitManualReference(text) {
   manualRefErrorEl.classList.add("hidden");
   const result = await postJSON("/api/bible/manual", { text });
@@ -255,12 +320,23 @@ function showError(message) {
 pauseBtnEl.addEventListener("click", togglePause);
 modeSubsBtnEl.addEventListener("click", () => setDisplayMode("subtitles_bible"));
 modeBibleBtnEl.addEventListener("click", () => setDisplayMode("bible_only"));
-bibleStyleSelectEl.addEventListener("change", () => setBibleStyle(bibleStyleSelectEl.value));
+styleBtnEls.forEach((button) => {
+  button.addEventListener("click", () => setBibleStyle(button.dataset.style));
+});
+chunkPrevBtnEl.addEventListener("click", () => stepChunk(-1));
+chunkNextBtnEl.addEventListener("click", () => stepChunk(1));
 bibleVisibleBtnEl.addEventListener("click", toggleBibleVisible);
 manualRefFormEl.addEventListener("submit", (ev) => {
   ev.preventDefault();
   const text = manualRefInputEl.value.trim();
   if (text) submitManualReference(text);
+});
+
+// Arrow keys step through a passage as it is read, unless typing a reference.
+document.addEventListener("keydown", (ev) => {
+  if (ev.target === manualRefInputEl || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+  if (ev.key === "ArrowLeft") stepChunk(-1);
+  else if (ev.key === "ArrowRight") stepChunk(1);
 });
 
 // -----------------------------------------------------------------------

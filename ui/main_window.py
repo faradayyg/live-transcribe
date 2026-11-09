@@ -10,7 +10,9 @@ Bottom panel : Bible reference display
 
 from __future__ import annotations
 
+import math
 import os
+import webbrowser
 from dataclasses import replace
 from pathlib import Path
 from typing import Optional
@@ -29,7 +31,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QFileDialog,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -62,7 +63,7 @@ from transcript.models import BibleReference, TranscriptSegment
 from transcript.srt import generate_srt
 from transcription import create_engine
 from transcription.engine import TranscriptionEngine
-from web.server import WebOutputServer
+from web.server import BIBLE_STYLES, WebOutputServer
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +171,69 @@ _STATUS_COLORS = {
 }
 
 _VALID_DISPLAY_MODES = ("subtitles_bible", "bible_only")
-_VALID_BIBLE_STYLES = ("gold", "classic")
+
+_NO_REFERENCE_TEXT = "No reference selected"
+_REF_LABEL_ACTIVE_STYLE = "color: #f0c04a;"
+_REF_LABEL_EMPTY_STYLE = "color: #9a9aac;"
+
+# Meter colour by position: (minimum meter value, colour), loudest first.
+_LEVEL_BANDS = ((90, "#e74c3c"), (75, "#f39c12"), (0, "#27ae60"))
+
+# Fusion + the dark palette (main.py) supply the base look; this adds the
+# shared widget styling so it is defined once rather than per widget.
+_APP_STYLESHEET = """
+QGroupBox {
+    border: 1px solid #333348; border-radius: 8px;
+    margin-top: 14px; padding: 8px 4px 4px 4px;
+}
+QGroupBox::title {
+    subcontrol-origin: margin; left: 8px; padding: 0 3px;
+    color: #9a9aac; font-weight: bold;
+}
+QPushButton {
+    background: #2d2d41; border: 1px solid #3f3f58; border-radius: 6px;
+    padding: 5px 10px;
+}
+QPushButton:hover { background: #38384f; border-color: #4090cf; }
+QPushButton:pressed { background: #26263a; }
+QPushButton:disabled {
+    background: #232333; border-color: #2c2c3e; color: #66667a;
+}
+QPushButton#startBtn:enabled {
+    background: #27ae60; border-color: #27ae60; color: white; font-weight: bold;
+}
+QPushButton#startBtn:enabled:hover { background: #2fc06c; }
+QPushButton#stopBtn:enabled {
+    background: #c0392b; border-color: #c0392b; color: white; font-weight: bold;
+}
+QPushButton#stopBtn:enabled:hover { background: #d44637; }
+QPushButton#smallBtn { padding: 2px 8px; font-size: 11px; }
+QLineEdit {
+    background: #161623; border: 1px solid #333348; border-radius: 6px;
+    padding: 4px 6px;
+}
+QLineEdit:focus { border-color: #4090cf; }
+QTextEdit {
+    background: #161623; color: #e0e0e0; border: 1px solid #2a2a3c;
+    border-radius: 6px; padding: 8px;
+}
+QListWidget {
+    background: #161623; color: #e0e0e0; border: 1px solid #2a2a3c;
+    border-radius: 6px; font-size: 12px; outline: 0;
+}
+QListWidget::item { padding: 4px 8px; border-radius: 4px; }
+QListWidget::item:hover { background: #26263a; }
+QListWidget::item:selected { background: #2c5f8a; color: white; }
+QListWidget#chunkList::item {
+    padding: 3px 10px; margin: 2px; border: 1px solid #3f3f58;
+}
+QListWidget#chunkList::item:selected { border-color: #4090cf; }
+QProgressBar { border: none; border-radius: 3px; background: #161623; }
+QLabel#banner {
+    background: #4a1010; color: #ffb4b4; padding: 8px; border-radius: 6px;
+}
+QLabel#muted { color: #9a9aac; font-size: 11px; }
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +294,7 @@ class MainWindow(QMainWindow):
         self._bible_style = "gold"
         self._current_chunk_index: Optional[int] = None
         self._selected_provider = "Deepgram"  # default
+        self._level_color = ""
 
         logger.info(
             "Starting transcriber...", extra={"provider": self._selected_provider}
@@ -297,18 +361,20 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _build_ui(self) -> None:
+        self.setStyleSheet(_APP_STYLESHEET)
+
         central = QWidget()
         self.setCentralWidget(central)
         root = QHBoxLayout(central)
-        root.setContentsMargins(8, 8, 8, 8)
-        root.setSpacing(8)
+        root.setContentsMargins(10, 10, 10, 10)
+        root.setSpacing(10)
 
         # ---- Left panel ------------------------------------------------
         left = QWidget()
         left.setFixedWidth(240)
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(10)
+        left_layout.setSpacing(6)
 
         # Header
         title = QLabel("Live Transcriber")
@@ -323,8 +389,6 @@ class MainWindow(QMainWindow):
             f"color: {_STATUS_COLORS['Disconnected']}; font-weight: bold;"
         )
         left_layout.addWidget(self._status_badge)
-
-        left_layout.addWidget(_hline())
 
         # Audio input group
         audio_group = QGroupBox("Audio Input")
@@ -341,18 +405,12 @@ class MainWindow(QMainWindow):
         device_row.addWidget(self._refresh_btn)
         audio_layout.addLayout(device_row)
 
-        level_label = QLabel("Level")
-        audio_layout.addWidget(level_label)
         self._level_bar = QProgressBar()
         self._level_bar.setRange(0, 100)
         self._level_bar.setValue(0)
         self._level_bar.setTextVisible(False)
-        self._level_bar.setFixedHeight(12)
-        self._level_bar.setStyleSheet(
-            "QProgressBar { border: 1px solid #555; border-radius: 3px; background: #222; }"
-            "QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0,"
-            " stop:0 #27ae60, stop:0.6 #f39c12, stop:1 #e74c3c); border-radius: 2px; }"
-        )
+        self._level_bar.setFixedHeight(10)
+        self._level_bar.setToolTip("Input level")
         audio_layout.addWidget(self._level_bar)
         left_layout.addWidget(audio_group)
 
@@ -360,37 +418,35 @@ class MainWindow(QMainWindow):
         session_group = QGroupBox("Session")
         session_layout = QVBoxLayout(session_group)
 
-        session_layout.addWidget(QLabel("Transcription engine:"))
+        session_layout.addWidget(_muted_label("Transcription engine"))
         self._engine_combo = QComboBox()
         self._engine_combo.addItems(["Deepgram", "OpenAI"])
         self._engine_combo.currentTextChanged.connect(self._on_engine_changed)
         session_layout.addWidget(self._engine_combo)
 
-        session_layout.addWidget(QLabel("Session name:"))
+        session_layout.addWidget(_muted_label("Session name"))
         self._session_name = QLineEdit("session")
         session_layout.addWidget(self._session_name)
 
-        self._start_btn = QPushButton("▶  Start")
-        self._start_btn.setStyleSheet(
-            "background-color: #27ae60; color: white; font-weight: bold; padding: 6px;"
-        )
+        self._start_btn = QPushButton("Start")
+        self._start_btn.setObjectName("startBtn")
         self._start_btn.clicked.connect(self._on_start)
         session_layout.addWidget(self._start_btn)
 
-        self._pause_btn = QPushButton("⏸  Pause")
+        transport_row = QHBoxLayout()
+        self._pause_btn = QPushButton("Pause")
         self._pause_btn.setEnabled(False)
         self._pause_btn.clicked.connect(self._on_pause)
-        session_layout.addWidget(self._pause_btn)
+        transport_row.addWidget(self._pause_btn)
 
-        self._stop_btn = QPushButton("⏹  Stop")
+        self._stop_btn = QPushButton("Stop")
+        self._stop_btn.setObjectName("stopBtn")
         self._stop_btn.setEnabled(False)
-        self._stop_btn.setStyleSheet(
-            "background-color: #c0392b; color: white; padding: 6px;"
-        )
         self._stop_btn.clicked.connect(self._on_stop)
-        session_layout.addWidget(self._stop_btn)
+        transport_row.addWidget(self._stop_btn)
+        session_layout.addLayout(transport_row)
 
-        self._save_btn = QPushButton("💾  Save Transcript")
+        self._save_btn = QPushButton("Save Transcript")
         self._save_btn.setEnabled(False)
         self._save_btn.clicked.connect(self._on_save)
         session_layout.addWidget(self._save_btn)
@@ -404,89 +460,13 @@ class MainWindow(QMainWindow):
 
         if self._web_server:
             base_url = self._web_server.url
-            full_url = base_url + "?full=true"
-            bible_url = base_url + "?bible=true"
-
-            label_style = "color: #6ab0f5; font-size: 11px;"
-            selectable = Qt.TextInteractionFlag.TextSelectableByMouse
-
-            web_layout.addWidget(QLabel("Lower-third (default):"))
-            lt_row = QHBoxLayout()
-            lt_label = QLabel(base_url)
-            lt_label.setStyleSheet(label_style)
-            lt_label.setWordWrap(True)
-            lt_label.setTextInteractionFlags(selectable)
-            copy_lt_btn = QPushButton("⧉")
-            copy_lt_btn.setFixedWidth(28)
-            copy_lt_btn.setToolTip("Copy lower-third URL")
-            copy_lt_btn.clicked.connect(
-                lambda: self._copy_to_clipboard(base_url, copy_lt_btn)
-            )
-            lt_row.addWidget(lt_label)
-            lt_row.addWidget(copy_lt_btn)
-            web_layout.addLayout(lt_row)
-
-            web_layout.addWidget(QLabel("Full transcript:"))
-            full_row = QHBoxLayout()
-            full_label = QLabel(full_url)
-            full_label.setStyleSheet(label_style)
-            full_label.setWordWrap(True)
-            full_label.setTextInteractionFlags(selectable)
-            copy_full_btn = QPushButton("⧉")
-            copy_full_btn.setFixedWidth(28)
-            copy_full_btn.setToolTip("Copy full-transcript URL")
-            copy_full_btn.clicked.connect(
-                lambda: self._copy_to_clipboard(full_url, copy_full_btn)
-            )
-            full_row.addWidget(full_label)
-            full_row.addWidget(copy_full_btn)
-            web_layout.addLayout(full_row)
-
-            web_layout.addWidget(QLabel("Bible-only:"))
-            bible_row = QHBoxLayout()
-            bible_label = QLabel(bible_url)
-            bible_label.setStyleSheet(label_style)
-            bible_label.setWordWrap(True)
-            bible_label.setTextInteractionFlags(selectable)
-            copy_bible_btn = QPushButton("⧉")
-            copy_bible_btn.setFixedWidth(28)
-            copy_bible_btn.setToolTip("Copy bible-only URL")
-            copy_bible_btn.clicked.connect(
-                lambda: self._copy_to_clipboard(bible_url, copy_bible_btn)
-            )
-            bible_row.addWidget(bible_label)
-            bible_row.addWidget(copy_bible_btn)
-            web_layout.addLayout(bible_row)
-
-            control_url = self._web_server.control_url
-            web_layout.addWidget(QLabel("Operator control panel (use on your phone):"))
-            control_row = QHBoxLayout()
-            control_label = QLabel(control_url)
-            control_label.setStyleSheet(label_style)
-            control_label.setWordWrap(True)
-            control_label.setTextInteractionFlags(selectable)
-            copy_control_btn = QPushButton("⧉")
-            copy_control_btn.setFixedWidth(28)
-            copy_control_btn.setToolTip("Copy control-panel URL")
-            copy_control_btn.clicked.connect(
-                lambda: self._copy_to_clipboard(control_url, copy_control_btn)
-            )
-            control_row.addWidget(control_label)
-            control_row.addWidget(copy_control_btn)
-            web_layout.addLayout(control_row)
-
-            open_lt_btn = QPushButton("🌐  Open Lower-third")
-            open_full_btn = QPushButton("🌐  Open Full Transcript")
-            open_bible_btn = QPushButton("🌐  Open Bible-only")
-            open_control_btn = QPushButton("🎛  Open Control Panel")
-            open_lt_btn.clicked.connect(self._open_web_output)
-            open_full_btn.clicked.connect(self._open_web_output_full)
-            open_bible_btn.clicked.connect(self._open_web_output_bible)
-            open_control_btn.clicked.connect(self._open_web_control)
-            web_layout.addWidget(open_lt_btn)
-            web_layout.addWidget(open_full_btn)
-            web_layout.addWidget(open_bible_btn)
-            web_layout.addWidget(open_control_btn)
+            for name, url in (
+                ("Lower-third", base_url),
+                ("Full transcript", base_url + "?full=true"),
+                ("Bible only", base_url + "?bible=true"),
+                ("Control panel", self._web_server.control_url),
+            ):
+                web_layout.addLayout(self._build_web_output_row(name, url))
         else:
             web_layout.addWidget(QLabel("⚠ Server unavailable"))
 
@@ -495,111 +475,133 @@ class MainWindow(QMainWindow):
 
         # ---- Right side (transcript + bible) ---------------------------
         right_splitter = QSplitter(Qt.Vertical)
+        right_splitter.setChildrenCollapsible(False)
 
         transcript_frame = QGroupBox("Live Transcript")
         transcript_layout = QVBoxLayout(transcript_frame)
         self._transcript_view = QTextEdit()
         self._transcript_view.setReadOnly(True)
         self._transcript_view.setFont(QFont("Georgia", 13))
-        self._transcript_view.setStyleSheet(
-            "QTextEdit { background: #1a1a2e; color: #e0e0e0; border: none; padding: 8px; }"
-        )
+        self._transcript_view.setMinimumHeight(120)
         transcript_layout.addWidget(self._transcript_view)
         right_splitter.addWidget(transcript_frame)
 
         bible_frame = QGroupBox("Scripture")
-        bible_layout = QVBoxLayout(bible_frame)
+        bible_layout = QHBoxLayout(bible_frame)
+        bible_layout.setSpacing(14)
 
-        # ---- Manual reference lookup --------------------------------
+        # ---- Left column: lookup + session history ---------------------
+        history_column = QVBoxLayout()
+        history_column.setSpacing(6)
+
         lookup_row = QHBoxLayout()
-        lookup_row.addWidget(QLabel("Reference:"))
         self._ref_input = QLineEdit()
-        self._ref_input.setPlaceholderText("e.g.  John 3:16  or  Romans 8:1-4")
+        self._ref_input.setPlaceholderText("John 3:16 or Romans 8:1-4")
         self._ref_input.returnPressed.connect(self._on_manual_ref_display)
         lookup_row.addWidget(self._ref_input)
         display_btn = QPushButton("Display")
-        display_btn.setFixedWidth(64)
         display_btn.clicked.connect(self._on_manual_ref_display)
         lookup_row.addWidget(display_btn)
-        self._ref_error_label = QLabel("")
-        self._ref_error_label.setStyleSheet("color: #e05050; font-size: 11px;")
-        bible_layout.addLayout(lookup_row)
-        bible_layout.addWidget(self._ref_error_label)
+        history_column.addLayout(lookup_row)
 
-        bible_layout.addWidget(_hline())
+        self._ref_error_label = QLabel("")
+        self._ref_error_label.setStyleSheet("color: #ff8a80; font-size: 11px;")
+        self._ref_error_label.hide()
+        history_column.addWidget(self._ref_error_label)
 
         list_header = QHBoxLayout()
-        list_header.addWidget(QLabel("References detected this session:"))
+        list_header.addWidget(_muted_label("Detected this session"))
         list_header.addStretch()
-        clear_bible_btn = QPushButton("✕  Clear")
-        clear_bible_btn.setFixedHeight(22)
-        clear_bible_btn.setStyleSheet("font-size: 11px; padding: 0 6px;")
+        clear_bible_btn = QPushButton("Clear")
+        clear_bible_btn.setObjectName("smallBtn")
         clear_bible_btn.clicked.connect(self._clear_bible_ref)
         list_header.addWidget(clear_bible_btn)
-        bible_layout.addLayout(list_header)
+        history_column.addLayout(list_header)
 
         self._bible_list = QListWidget()
-        self._bible_list.setFixedHeight(110)
-        self._bible_list.setStyleSheet(
-            "QListWidget { background: #1a1a2e; color: #e0e0e0; border: 1px solid #444; font-size: 12px; }"
-            "QListWidget::item:selected { background: #2c5f8a; color: #ffffff; }"
-        )
+        self._bible_list.setMinimumHeight(70)
         self._bible_list.itemClicked.connect(self._on_bible_item_clicked)
-        bible_layout.addWidget(self._bible_list)
+        history_column.addWidget(self._bible_list, stretch=1)
 
-        bible_layout.addWidget(_hline())
-        self._bible_ref_label = QLabel("—")
+        # ---- Right column: current reference ---------------------------
+        current_column = QVBoxLayout()
+        current_column.setSpacing(6)
+
+        self._bible_ref_label = QLabel(_NO_REFERENCE_TEXT)
         ref_font = QFont()
-        ref_font.setPointSize(12)
+        ref_font.setPointSize(13)
         ref_font.setBold(True)
         self._bible_ref_label.setFont(ref_font)
-        bible_layout.addWidget(self._bible_ref_label)
+        self._bible_ref_label.setStyleSheet(_REF_LABEL_EMPTY_STYLE)
+        current_column.addWidget(self._bible_ref_label)
 
         # Verse-pair navigator — shown only for ranged references
-        self._chunk_label = QLabel("Click a pair to display on overlay:")
-        self._chunk_label.setStyleSheet("color: #888; font-size: 11px; margin-top: 4px;")
+        self._chunk_label = _muted_label("Verse pairs (click to display)")
         self._chunk_list = QListWidget()
-        self._chunk_list.setFixedHeight(72)
+        self._chunk_list.setObjectName("chunkList")
+        self._chunk_list.setFixedHeight(64)
         self._chunk_list.setFlow(QListWidget.Flow.LeftToRight)
         self._chunk_list.setWrapping(True)
-        self._chunk_list.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self._chunk_list.setStyleSheet(
-            "QListWidget { background: #111122; color: #e0e0e0; border: 1px solid #333; font-size: 11px; }"
-            "QListWidget::item { padding: 3px 8px; margin: 2px; border: 1px solid #444; border-radius: 4px; }"
-            "QListWidget::item:selected { background: #2c5f8a; color: #fff; border-color: #5599cc; }"
+        self._chunk_list.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
+        self._chunk_list.setResizeMode(QListWidget.ResizeMode.Adjust)
         self._chunk_list.itemClicked.connect(self._on_chunk_clicked)
         self._chunk_label.hide()
         self._chunk_list.hide()
-        bible_layout.addWidget(self._chunk_label)
-        bible_layout.addWidget(self._chunk_list)
+        current_column.addWidget(self._chunk_label)
+        current_column.addWidget(self._chunk_list)
 
-        self._bible_verse_label = QLabel("")
-        self._bible_verse_label.setWordWrap(True)
-        self._bible_verse_label.setStyleSheet("color: #aaa; font-style: italic;")
-        bible_layout.addWidget(self._bible_verse_label)
-        bible_layout.addStretch()
+        self._bible_verse_view = QTextEdit()
+        self._bible_verse_view.setReadOnly(True)
+        self._bible_verse_view.setFont(QFont("Georgia", 12))
+        self._bible_verse_view.setMinimumHeight(60)
+        current_column.addWidget(self._bible_verse_view, stretch=1)
+
+        bible_layout.addLayout(history_column, stretch=2)
+        bible_layout.addLayout(current_column, stretch=3)
         right_splitter.addWidget(bible_frame)
 
-        right_splitter.setSizes([500, 140])
+        right_splitter.setStretchFactor(0, 1)
+        right_splitter.setStretchFactor(1, 0)
+        right_splitter.setSizes([480, 260])
 
-        # ---- API key warning -------------------------------------------
-        self._api_warning = QLabel()
-        self._api_warning.setWordWrap(True)
-        self._api_warning.setStyleSheet(
-            "background: #4a1010; color: #ffaaaa; padding: 6px; border-radius: 4px;"
-        )
-        self._api_warning.setVisible(False)
+        # ---- Warning / error banners -----------------------------------
+        self._api_warning = _banner_label()
+        self._error_banner = _banner_label()
 
         right_wrapper = QWidget()
         rw_layout = QVBoxLayout(right_wrapper)
         rw_layout.setContentsMargins(0, 0, 0, 0)
         rw_layout.addWidget(self._api_warning)
+        rw_layout.addWidget(self._error_banner)
         rw_layout.addWidget(right_splitter)
 
         # ---- Assemble --------------------------------------------------
         root.addWidget(left)
         root.addWidget(right_wrapper, stretch=1)
+
+    def _build_web_output_row(self, name: str, url: str) -> QHBoxLayout:
+        """One Web Output row: name, plus Copy and Open actions for its URL."""
+        row = QHBoxLayout()
+        row.setSpacing(4)
+        label = QLabel(name)
+        label.setToolTip(url)
+        row.addWidget(label)
+        row.addStretch()
+
+        copy_btn = QPushButton("Copy")
+        copy_btn.setObjectName("smallBtn")
+        copy_btn.setToolTip(f"Copy {url}")
+        copy_btn.clicked.connect(lambda: self._copy_to_clipboard(url, copy_btn))
+        row.addWidget(copy_btn)
+
+        open_btn = QPushButton("Open")
+        open_btn.setObjectName("smallBtn")
+        open_btn.setToolTip(f"Open {url}")
+        open_btn.clicked.connect(lambda: webbrowser.open(url))
+        row.addWidget(open_btn)
+        return row
 
     # ------------------------------------------------------------------
     # Helpers
@@ -632,34 +634,6 @@ class MainWindow(QMainWindow):
         self._selected_provider = provider
         self._check_api_key()
 
-    @Slot()
-    def _open_web_output(self) -> None:
-        import webbrowser
-
-        if self._web_server:
-            webbrowser.open(self._web_server.url)
-
-    @Slot()
-    def _open_web_output_full(self) -> None:
-        import webbrowser
-
-        if self._web_server:
-            webbrowser.open(self._web_server.url + "?full=true")
-
-    @Slot()
-    def _open_web_output_bible(self) -> None:
-        import webbrowser
-
-        if self._web_server:
-            webbrowser.open(self._web_server.url + "?bible=true")
-
-    @Slot()
-    def _open_web_control(self) -> None:
-        import webbrowser
-
-        if self._web_server:
-            webbrowser.open(self._web_server.control_url)
-
     def _copy_to_clipboard(self, text: str, button: QPushButton) -> None:
         QApplication.clipboard().setText(text)
         original = button.text()
@@ -679,8 +653,10 @@ class MainWindow(QMainWindow):
     def _set_status(self, status: str) -> None:
         color = _STATUS_COLORS.get(status, "#888888")
         provider = self._selected_provider
-        self._status_badge.setText(f"● {status}  [{provider}]")
+        self._status_badge.setText(f"● {status}  ·  {provider}")
         self._status_badge.setStyleSheet(f"color: {color}; font-weight: bold;")
+        if status in ("Connecting", "Live"):
+            self._error_banner.setVisible(False)
         if self._web_server:
             self._web_server.broadcast_status(status)
 
@@ -690,6 +666,11 @@ class MainWindow(QMainWindow):
 
     def _rebuild_transcript(self) -> None:
         """Repaint the transcript view from the manager's current state."""
+        scrollbar = self._transcript_view.verticalScrollBar()
+        previous_position = scrollbar.value()
+        # Only follow new text if the operator hasn't scrolled back to read.
+        follow_tail = previous_position >= scrollbar.maximum() - 4
+
         self._transcript_view.clear()
         cursor = self._transcript_view.textCursor()
 
@@ -710,10 +691,7 @@ class MainWindow(QMainWindow):
             interim_fmt.setFontItalic(True)
             cursor.insertText(interim.text.strip(), interim_fmt)
 
-        # Scroll to bottom
-        self._transcript_view.verticalScrollBar().setValue(
-            self._transcript_view.verticalScrollBar().maximum()
-        )
+        scrollbar.setValue(scrollbar.maximum() if follow_tail else previous_position)
 
     # ------------------------------------------------------------------
     # Session controls
@@ -797,7 +775,7 @@ class MainWindow(QMainWindow):
             return
         self._paused = True
         self._sig_pause.emit()
-        self._pause_btn.setText("▶  Resume")
+        self._pause_btn.setText("Resume")
         self._set_status("Paused")
         self._push_state()
 
@@ -808,7 +786,7 @@ class MainWindow(QMainWindow):
             return
         self._paused = False
         self._sig_resume.emit()
-        self._pause_btn.setText("⏸  Pause")
+        self._pause_btn.setText("Pause")
         self._set_status("Live")
         self._push_state()
 
@@ -819,7 +797,7 @@ class MainWindow(QMainWindow):
 
         self._start_btn.setEnabled(True)
         self._pause_btn.setEnabled(False)
-        self._pause_btn.setText("⏸  Pause")
+        self._pause_btn.setText("Pause")
         self._stop_btn.setEnabled(False)
         self._device_combo.setEnabled(True)
         self._refresh_btn.setEnabled(True)
@@ -943,11 +921,19 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def _on_error(self, message: str) -> None:
         self._set_status("Error")
-        self._transcript_view.append(f"\n⚠ {message}\n")
+        self._error_banner.setText(f"⚠  {message}")
+        self._error_banner.setVisible(True)
 
     @Slot(float)
     def _on_level(self, level: float) -> None:
-        self._level_bar.setValue(int(level * 100))
+        value = _level_to_meter(level)
+        self._level_bar.setValue(value)
+        color = next(c for floor, c in _LEVEL_BANDS if value >= floor)
+        if color != self._level_color:
+            self._level_color = color
+            self._level_bar.setStyleSheet(
+                f"QProgressBar::chunk {{ background: {color}; border-radius: 3px; }}"
+            )
 
     def _refresh_bible_list(self) -> None:
         """Rebuild the history list widget from current ReferenceHistory."""
@@ -983,8 +969,9 @@ class MainWindow(QMainWindow):
         refs = bible_detector.detect_all(text)
         if not refs:
             self._ref_error_label.setText(f'Could not parse "{text}"')
+            self._ref_error_label.show()
             return
-        self._ref_error_label.setText("")
+        self._ref_error_label.hide()
         self._display_manual_reference(refs[0])
 
     @Slot(str)
@@ -1009,6 +996,7 @@ class MainWindow(QMainWindow):
     def _show_bible_ref(self, ref: BibleReference, *, auto_select: bool = True) -> None:
         self._selected_ref = ref
         self._bible_ref_label.setText(ref.display())
+        self._bible_ref_label.setStyleSheet(_REF_LABEL_ACTIVE_STYLE)
         self._populate_chunk_list(ref)
         chunks = self._get_chunks()
         if chunks:
@@ -1016,11 +1004,12 @@ class MainWindow(QMainWindow):
             # listed in the verse-pair navigator for the operator to click
             # through as the reader reads.
             self._current_chunk_index = 0
+            self._chunk_list.setCurrentRow(0)
             verse_text = self._get_verse_range_text(chunks[0])
         else:
             self._current_chunk_index = None
             verse_text = self._get_verse_range_text(ref)
-        self._bible_verse_label.setText(verse_text)
+        self._bible_verse_view.setPlainText(verse_text)
         if auto_select:
             self._refresh_bible_list()
         self._broadcast_current_bible()
@@ -1075,13 +1064,12 @@ class MainWindow(QMainWindow):
     @Slot(str)
     def _set_bible_style(self, style: str) -> None:
         """
-        Switch the web output's Bible verse styling between 'gold' (the
-        default gradient/badge look) and 'classic' (the plain transparent
-        style used before it). Purely a display/appearance setting — never
-        touches transcription, Bible detection, or the current reference.
+        Switch the web output's Bible verse styling to one of BIBLE_STYLES.
+        Purely a display/appearance setting — never touches transcription,
+        Bible detection, or the current reference.
         Shared by the web control panel (POST /api/bible/style).
         """
-        if style not in _VALID_BIBLE_STYLES or style == self._bible_style:
+        if style not in BIBLE_STYLES or style == self._bible_style:
             return
         self._bible_style = style
         self._push_state()
@@ -1129,6 +1117,9 @@ class MainWindow(QMainWindow):
         """
         history = self._bible_history.get_all()
         chunks = self._get_chunks()
+        current_display, current_text = (
+            self._current_display_text() if self._selected_ref else (None, None)
+        )
         return {
             "type": "state",
             "transcription": {
@@ -1144,6 +1135,8 @@ class MainWindow(QMainWindow):
                     if self._selected_ref
                     else None
                 ),
+                "current_display": current_display,
+                "current_text": current_text,
                 "visible": self._bible_visible,
                 "verse_chunks": [c.display() for c in chunks],
                 "current_chunk_index": self._current_chunk_index,
@@ -1196,7 +1189,11 @@ class MainWindow(QMainWindow):
         self._chunk_label.show()
         self._chunk_list.show()
         for chunk in chunks:
-            item = QListWidgetItem(chunk.display())
+            verses = f"{chunk.verse_start}"
+            if chunk.verse_end is not None:
+                verses += f"–{chunk.verse_end}"
+            item = QListWidgetItem(verses)
+            item.setToolTip(chunk.display())
             item.setData(Qt.ItemDataRole.UserRole, chunk)
             self._chunk_list.addItem(item)
 
@@ -1233,7 +1230,8 @@ class MainWindow(QMainWindow):
             return
         chunk = chunks[index]
         self._current_chunk_index = index
-        self._bible_verse_label.setText(self._get_verse_range_text(chunk))
+        self._chunk_list.setCurrentRow(index)
+        self._bible_verse_view.setPlainText(self._get_verse_range_text(chunk))
         self._broadcast_current_bible()
         self._push_state()
 
@@ -1268,8 +1266,9 @@ class MainWindow(QMainWindow):
         self._selected_ref = None
         self._current_chunk_index = None
         self._bible_list.clear()
-        self._bible_ref_label.setText("—")
-        self._bible_verse_label.setText("")
+        self._bible_ref_label.setText(_NO_REFERENCE_TEXT)
+        self._bible_ref_label.setStyleSheet(_REF_LABEL_EMPTY_STYLE)
+        self._bible_verse_view.clear()
         self._chunk_list.clear()
         self._chunk_label.hide()
         self._chunk_list.hide()
@@ -1295,8 +1294,27 @@ class MainWindow(QMainWindow):
 # ---------------------------------------------------------------------------
 
 
-def _hline() -> QFrame:
-    line = QFrame()
-    line.setFrameShape(QFrame.HLine)
-    line.setFrameShadow(QFrame.Sunken)
-    return line
+def _muted_label(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("muted")
+    return label
+
+
+def _banner_label() -> QLabel:
+    label = QLabel()
+    label.setObjectName("banner")
+    label.setWordWrap(True)
+    label.setVisible(False)
+    return label
+
+
+def _level_to_meter(level: float) -> int:
+    """
+    Map a linear audio level (0.0-1.0) to a 0-100 meter position on a
+    -60 dBFS..0 dBFS scale. Speech sits around 0.01-0.1 linear, which would
+    barely move a linear meter.
+    """
+    if level <= 0:
+        return 0
+    decibels = 20 * math.log10(level)
+    return max(0, min(100, round((decibels + 60) / 60 * 100)))

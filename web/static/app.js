@@ -67,6 +67,8 @@ let bibleActive    = false;
 let bibleVisible   = true;
 let displayMode    = "subtitles_bible";
 let bibleStyle     = "gold";
+let shownBibleKey  = "";
+let fittedBibleKey = "";
 let socket         = null;
 let reconnectDelay = RECONNECT_BASE_MS;
 
@@ -161,13 +163,34 @@ function applyBible(msg) {
     render();
     return;
   }
-  const isNewReference = bibleRefEl.textContent !== msg.reference
-    || bibleTextEl.textContent !== (msg.text || "");
-  bibleRefEl.textContent  = msg.reference;
-  bibleTextEl.textContent = msg.text || "";
+  const key = `${msg.reference}\n${msg.text || ""}`;
+  const isNewReference = key !== shownBibleKey;
+  shownBibleKey = key;
+  bibleRefEl.textContent = msg.reference;
+  renderVerseText(msg.text || "");
   bibleActive = true;
   render();
   if (isNewReference) triggerBiblePop();
+}
+
+/**
+ * Multi-verse text arrives as "3  For what...\n4  That the...". Render the
+ * numbers as small markers so they don't read as part of the sentence.
+ */
+function renderVerseText(text) {
+  bibleTextEl.textContent = "";
+  text.split("\n").forEach((line, index) => {
+    const match = line.match(/^(\d+)\s{2}(.*)$/);
+    if (index > 0) bibleTextEl.append(" ");
+    if (match) {
+      const number = document.createElement("span");
+      number.className = "verse-num";
+      number.textContent = match[1];
+      bibleTextEl.append(number, match[2]);
+    } else {
+      bibleTextEl.append(line);
+    }
+  });
 }
 
 /**
@@ -206,8 +229,29 @@ function applyState(msg) {
 
 function render() {
   if (isFullMode)  { renderFull();      return; }
-  if (isBibleMode || displayMode === "bible_only") { renderBibleOnly(); return; }
-  renderOverlay();
+  if (isBibleMode || displayMode === "bible_only") renderBibleOnly();
+  else renderOverlay();
+  fitBibleToViewport();
+}
+
+/**
+ * Scale a passage down just enough to fit the browser source. The slot
+ * grows upward from the bottom, so anything too tall would otherwise lose
+ * its first lines and the reference badge off the top of the source.
+ */
+function fitBibleToViewport() {
+  if (viewBibleEl.classList.contains("hidden")) return;
+  const key = [shownBibleKey, bibleStyle, displayMode, innerWidth, innerHeight].join("|");
+  if (key === fittedBibleKey) return;
+  fittedBibleKey = key;
+
+  const available = innerHeight - parseFloat(getComputedStyle(slotEl).paddingBottom) - 8;
+  let scale = 1;
+  viewBibleEl.style.setProperty("--fit", scale);
+  while (viewBibleEl.offsetHeight > available && scale > 0.5) {
+    scale -= 0.05;
+    viewBibleEl.style.setProperty("--fit", scale);
+  }
 }
 
 /** Default overlay: subtitle + bible share one slot; bible takes precedence. */
@@ -215,6 +259,7 @@ function renderOverlay() {
   if (bibleActive && bibleVisible) {
     viewSubtitleEl.classList.add("hidden");
     viewBibleEl.classList.remove("hidden");
+    slotEl.classList.remove("empty");
     return;
   }
   viewBibleEl.classList.add("hidden");
@@ -222,15 +267,15 @@ function renderOverlay() {
   currentTextEl.textContent = finalSegments.length
     ? finalSegments[finalSegments.length - 1].text : "";
   interimTextEl.textContent = interimText;
+  slotEl.classList.toggle("empty", !currentTextEl.textContent && !interimText);
 }
 
 /** Bible-only: show the verse when active and visible, otherwise nothing. */
 function renderBibleOnly() {
-  if (bibleActive && bibleVisible) {
-    viewBibleEl.classList.remove("hidden");
-  } else {
-    viewBibleEl.classList.add("hidden");
-  }
+  const showing = bibleActive && bibleVisible;
+  viewSubtitleEl.classList.add("hidden");
+  viewBibleEl.classList.toggle("hidden", !showing);
+  slotEl.classList.toggle("empty", !showing);
 }
 
 /** Full-transcript: scrolling history of all paragraphs. */
@@ -256,6 +301,8 @@ function renderFull() {
 // -----------------------------------------------------------------------
 
 function setDot(state) { connDotEl.className = state; }
+
+window.addEventListener("resize", render);
 
 // -----------------------------------------------------------------------
 // Start
